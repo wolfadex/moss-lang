@@ -1,0 +1,5 @@
+[fromInt32] gives
+
+
+fromInt32: (Int32 -> String)
+    **target__string_fromInt32**

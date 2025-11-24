@@ -1,0 +1,18 @@
+[sum] give
+
+# The above is how you decide what words are available to
+# other files when they include this file
+
+# In the definition below, note the name of the types. `number`
+# is a special type variable that is limited to Int8 through Int64,
+# Float32, Float64, and UInt8 through UInt64.
+
+#| Takes a quote of numbers and adds them together
+sum: ([number] -> number)
+    0 [+]
+    # There are 2 built-in words, each and eachWith.
+    # Both take 2 quotes. The 2nd quote on the stack
+    # is iterated over, and for each value the 1st stack
+    # is "called". `eachWith` is also given a "starting"
+    # value between the 2 stacks.
+    eachWith

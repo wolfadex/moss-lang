@@ -1,0 +1,50 @@
+[main] give
+
+file://../core/io.qd use
+file://../core/quote.qd use
+file://../core/string.qd "str" use
+
+# The above are examples of importing/requiring other code.
+# The first word in each line is a path, specifically a
+# file path. Paths (of the shape <protocol>://<path> are native
+# types in Quad. The second word, "use", is a reserved word.
+# It takes a path, reads in that path, and adds the new dictionary
+# to the available names. The default is to use the file
+# name as the dictionary accessory, e.g. quote.<word>. You
+# can optionally alias if you put a 1 word string between the
+# path and the word "use".
+
+
+# This is a comment
+
+#| This is the entry point to a program
+main:
+    # This prints words to the terminal
+    "Hello, World!" io.print
+    # This sums a quote of numbers, converts it to a string, then prints it
+    [1 2 3 4] quote.sum str.fromInt32 io.print
+
+#| This is a doc comment for a definition.
+#| Sequential doc comments are gathered together
+#| into 1 comment.
+#| A definition is a word that ends in a colon. The
+#| body of a definition is every word after the colon,
+#| separated by white space, that is indented.
+#|
+#| This function takes a string and prints out a greeting.
+greet:
+    # an anonymous function (aka lambda) starts with a slash,
+    # has some named args (which pop the top values off the stack),
+    # and ends with a semi-colon. The body is everything between
+    # the arrow and semi-colon.
+    :name ["Hello, " name "!"] string.concat io.print;
+
+
+# The following definition has a type as well. The parens after the name
+# contain the type. It says that it exects 2 values on the stack and puts
+# 2 values on the stack, and that the type of the top value (b) and type
+# of the second from the top value (a) are swapped on the return stack.
+
+#| Takes the top 2 values on the stack and swaps their places.
+swap: (a b -> b a)
+    :a :b b a

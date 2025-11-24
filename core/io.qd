@@ -1,0 +1,9 @@
+[print] gives
+
+
+print: (String -> )
+    **target__io_print**
+
+
+readFile: (Path -> Result FileReadError String)
+    **target__io_readFile**

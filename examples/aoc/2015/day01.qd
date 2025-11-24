@@ -1,0 +1,21 @@
+[main] give
+
+file://../core/io.qd use
+file://../core/string.qd use
+
+main:
+    file://day01.txt io.readFile
+    0
+    [
+        ['(' =] [1 +] if
+        [')' =] [1 +] elif
+    ] eachWith
+    string.fromInt32
+    io.print
+
+
+
+if: ([] [] -> Bool)
+elif: (Bool [] [] -> Bool)
+    :when :cond []
+else: (Bool [] [] ->)
