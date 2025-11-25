@@ -276,7 +276,6 @@ parseFilePathHelper reverseChunks =
             |. Parser.Advanced.spaces
         , Parser.Advanced.succeed (\chunk -> Parser.Advanced.Loop (chunk :: reverseChunks))
             |= (Parser.Advanced.succeed ()
-                    -- |. Parser.Advanced.chompWhile (\char -> char /= ' ' && char /= '\\')
                     |. Parser.Advanced.chompWhile (\char -> not (isSpace char || char == '\\'))
                     |> Parser.Advanced.getChompedString
                )

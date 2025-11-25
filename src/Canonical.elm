@@ -17,10 +17,14 @@ type Give
 
 
 type alias Use =
-    { uri : Source.Uri
+    { uri : Uri
     , alias_ : Maybe String
     , name : String
     }
+
+
+type Uri
+    = FilePath String
 
 
 type alias Definition =
@@ -38,7 +42,7 @@ type Word
     | WInt Int
     | WFloat Float
     | WRecord (Dict String (List Word))
-    | WUri Source.Uri
+    | WUri Uri
     | WQuote (List Word)
     | WVariable String
     | WNamespacedWord String String
@@ -64,6 +68,7 @@ type Error
     | UnexpectedDocComment Located.Span
     | UnexpectedTypeDef Located.Span
     | UnexpectedWord (Located Source.Word)
+    | UnsupportedUri (Located Source.Uri)
 
 
 type Warning
@@ -214,10 +219,10 @@ usesFromSourceHelper warnings uses wantToUse =
                                             Err err ->
                                                 Err err
 
-                                            Ok ( _, uriWarnings ) ->
+                                            Ok ( validUri, _, uriWarnings ) ->
                                                 usesFromSourceHelper
                                                     (uriWarnings ++ warnings)
-                                                    ({ uri = uri
+                                                    ({ uri = validUri
                                                      , alias_ = Just aliasName
                                                      , name = aliasName
                                                      }
@@ -238,10 +243,10 @@ usesFromSourceHelper warnings uses wantToUse =
                         Err err ->
                             Err err
 
-                        Ok ( name, uriWarnings ) ->
+                        Ok ( validUri, name, uriWarnings ) ->
                             usesFromSourceHelper
                                 (uriWarnings ++ warnings)
-                                ({ uri = uri
+                                ({ uri = validUri
                                  , alias_ = Nothing
                                  , name = name
                                  }
@@ -253,7 +258,7 @@ usesFromSourceHelper warnings uses wantToUse =
             Err (CantUse cantUse)
 
 
-uriToUse : Source.Uri -> Result Error ( String, List Warning )
+uriToUse : Source.Uri -> Result Error ( Uri, String, List Warning )
 uriToUse uri =
     case uri of
         Source.UnknownUri scheme details ->
@@ -275,7 +280,7 @@ uriToUse uri =
 
                         Just ( first, rest ) ->
                             if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
-                                Ok ( withoutExtension, [] )
+                                Ok ( FilePath path, withoutExtension, [] )
 
                             else
                                 Err (InvalidFileName span withoutExtension)
@@ -478,7 +483,15 @@ mapSourceWord ((Located span word) as sourceWord) =
             Ok ( [ WWord "set", WString key ], [] )
 
         Source.WUri uri ->
-            Ok ( [ WUri uri ], [] )
+            case uri of
+                Source.UnknownUri _ _ ->
+                    Err (UnsupportedUri (Located span uri))
+
+                Source.FilePath (Located _ path) ->
+                    Ok
+                        ( [ WUri (FilePath path) ]
+                        , []
+                        )
 
         Source.WNamed _ ->
             Err (UnexpectedNamed span)
