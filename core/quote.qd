@@ -1,4 +1,4 @@
-[sum] give
+give: [sum]
 
 # The above is how you decide what words are available to
 # other files when they include this file

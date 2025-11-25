@@ -1,8 +1,10 @@
-[main] give
+give: [main]
 
-file://../core/io.qd use
-file://../core/quote.qd use
-file://../core/string.qd "str" use
+use: [
+        file://../core/io.qd
+        file://../core/quote.qd
+        file://../core/string.qd "str"
+    ]
 
 # The above are examples of importing/requiring other code.
 # The first word in each line is a path, specifically a

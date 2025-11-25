@@ -1,27 +1,14 @@
 module Source exposing (..)
 
+import Located exposing (Located(..))
 import Parser.Advanced exposing ((|.), (|=))
 import Parser.Advanced.Workaround
-
-
-type Located a
-    = Located Span a
-
-
-type alias Span =
-    { start : Point
-    , end : Point
-    }
-
-
-type alias Point =
-    { row : Int
-    , column : Int
-    }
+import Set exposing (Set)
 
 
 type Word
     = WString String
+    | WChar String
     | WWord String
     | WInt Int
     | WFloat Float
@@ -35,6 +22,7 @@ type Word
     | WNamespacedWord (Located String) (Located String)
     | WComment String
     | WDocComment String
+    | WTypeDef TypeDefinition
 
 
 type Uri
@@ -57,6 +45,8 @@ type Problem
     | ExpectedInt
     | ExpectedNameStart
     | ExpectedNamedEnd
+    | ExpectedChar
+    | ExpectedTypeVarStart
 
 
 type alias DeadEnd =
@@ -73,6 +63,7 @@ parseInput =
     Parser.Advanced.succeed identity
         |. Parser.Advanced.spaces
         |= Parser.Advanced.loop [] parseWords
+        |. Parser.Advanced.spaces
         |. Parser.Advanced.end EndOfFile
 
 
@@ -94,6 +85,10 @@ parseWord =
                   parseString
                     |> Parser.Advanced.map WString
 
+                -- | WChar String
+                , parseChar
+                    |> Parser.Advanced.map WChar
+
                 -- | WInt Int
                 -- | WFloat Float
                 , parseNumber
@@ -105,6 +100,10 @@ parseWord =
                 -- | WQuote (List (Located Word))
                 , parseQuote
                     |> Parser.Advanced.map WQuote
+
+                -- | WTypeDef TypeDefinition
+                , parseTypeDef
+                    |> Parser.Advanced.map WTypeDef
 
                 -- | WComment String
                 -- | WDocComment String
@@ -128,7 +127,7 @@ parseWord =
                 -- | WNamed String
                 , parseWordVariants
                 ]
-                |> parseLocated
+                |> Located.parse
            )
         |. Parser.Advanced.spaces
 
@@ -137,8 +136,8 @@ parseVariable : Parser String
 parseVariable =
     Parser.Advanced.succeed ()
         |. token ":"
-        |. Parser.Advanced.chompIf (\char -> Char.isAlpha char && Char.isLower char) ExpectedNameStart
-        |. Parser.Advanced.chompWhile (\char -> Char.isAlphaNum char || char == '_' || char == '-')
+        |. Parser.Advanced.chompIf validWordStart ExpectedNameStart
+        |. Parser.Advanced.chompWhile validWordMiddle
         |> Parser.Advanced.getChompedString
 
 
@@ -146,8 +145,8 @@ parseGet : Parser String
 parseGet =
     Parser.Advanced.succeed ()
         |. token "."
-        |. Parser.Advanced.chompIf (\char -> Char.isAlpha char && Char.isLower char) ExpectedNameStart
-        |. Parser.Advanced.chompWhile (\char -> Char.isAlphaNum char || char == '_' || char == '-')
+        |. Parser.Advanced.chompIf validWordStart ExpectedNameStart
+        |. Parser.Advanced.chompWhile validWordMiddle
         |> Parser.Advanced.getChompedString
 
 
@@ -155,9 +154,46 @@ parseSet : Parser String
 parseSet =
     Parser.Advanced.succeed ()
         |. token "^"
-        |. Parser.Advanced.chompIf (\char -> Char.isAlpha char && Char.isLower char) ExpectedNameStart
-        |. Parser.Advanced.chompWhile (\char -> Char.isAlphaNum char || char == '_' || char == '-')
+        |. Parser.Advanced.chompIf validWordStart ExpectedNameStart
+        |. Parser.Advanced.chompWhile validWordMiddle
         |> Parser.Advanced.getChompedString
+
+
+isSpace : Char -> Bool
+isSpace char =
+    char == ' ' || char == '\n' || char == '\u{000D}'
+
+
+reservedChars : Set Char
+reservedChars =
+    Set.fromList
+        [ '.'
+        , '^'
+        , ':'
+        , '['
+        , ']'
+        , '{'
+        , '}'
+        , '('
+        , ')'
+        ]
+
+
+validWordStart : Char -> Bool
+validWordStart char =
+    if Char.isAlpha char then
+        Char.isLower char
+
+    else if Char.isDigit char then
+        False
+
+    else
+        not (Set.member char reservedChars)
+
+
+validWordMiddle : Char -> Bool
+validWordMiddle char =
+    not (isSpace char || Set.member char reservedChars)
 
 
 parseWordVariants : Parser Word
@@ -174,8 +210,8 @@ parseWordVariants =
                 )
                 |= Parser.Advanced.getPosition
                 |= (Parser.Advanced.succeed ()
-                        |. Parser.Advanced.chompIf (\char -> Char.isAlpha char && Char.isLower char) ExpectedNameStart
-                        |. Parser.Advanced.chompWhile (\char -> Char.isAlphaNum char || char == '_' || char == '-')
+                        |. Parser.Advanced.chompIf validWordStart ExpectedNameStart
+                        |. Parser.Advanced.chompWhile validWordMiddle
                         |> Parser.Advanced.getChompedString
                    )
                 |= Parser.Advanced.getPosition
@@ -221,7 +257,7 @@ parseFilePath : Parser Uri
 parseFilePath =
     Parser.Advanced.succeed FilePath
         |= (Parser.Advanced.loop [] parseFilePathHelper
-                |> parseLocated
+                |> Located.parse
            )
 
 
@@ -240,7 +276,8 @@ parseFilePathHelper reverseChunks =
             |. Parser.Advanced.spaces
         , Parser.Advanced.succeed (\chunk -> Parser.Advanced.Loop (chunk :: reverseChunks))
             |= (Parser.Advanced.succeed ()
-                    |. Parser.Advanced.chompWhile (\char -> char /= ' ' && char /= '\\')
+                    -- |. Parser.Advanced.chompWhile (\char -> char /= ' ' && char /= '\\')
+                    |. Parser.Advanced.chompWhile (\char -> not (isSpace char || char == '\\'))
                     |> Parser.Advanced.getChompedString
                )
         ]
@@ -255,7 +292,7 @@ parseUnknownUri scheme =
 parseUriPath : Parser (Located String)
 parseUriPath =
     Parser.Advanced.loop [] parseUriPathHelper
-        |> parseLocated
+        |> Located.parse
 
 
 parseUriPathHelper : List String -> Parser (Parser.Advanced.Step (List String) String)
@@ -305,11 +342,11 @@ parseKey =
     Parser.Advanced.succeed WNamed
         |= (Parser.Advanced.succeed ()
                 |. Parser.Advanced.chompIf (\char -> Char.isAlpha char && Char.isLower char) ExpectedNameStart
-                |. Parser.Advanced.Workaround.chompUntilBefore (Parser.Advanced.Token ":" ExpectedNamedEnd)
+                |. Parser.Advanced.chompWhile (\char -> not (isSpace char) && char /= ':')
                 |> Parser.Advanced.getChompedString
            )
         |. token ":"
-        |> parseLocated
+        |> Located.parse
 
 
 parseComment : Parser Word
@@ -365,6 +402,85 @@ parseNumber =
             )
 
 
+parseTypeDef : Parser TypeDefinition
+parseTypeDef =
+    Parser.Advanced.succeed TypeDefinition
+        |. token "("
+        |. Parser.Advanced.spaces
+        |= Located.parse (parseTypeStack "->")
+        |= Located.parse (parseTypeStack ")")
+
+
+parseTypeStack : String -> Parser (List (Located Type))
+parseTypeStack endTok =
+    Parser.Advanced.loop [] (parseTypeStackHelper endTok)
+
+
+parseTypeStackHelper : String -> List (Located Type) -> Parser (Parser.Advanced.Step (List (Located Type)) (List (Located Type)))
+parseTypeStackHelper endTok reverseTypes =
+    Parser.Advanced.oneOf
+        [ Parser.Advanced.succeed (Parser.Advanced.Done (List.reverse reverseTypes))
+            |. Parser.Advanced.spaces
+            |. token endTok
+        , Parser.Advanced.succeed (\type_ -> Parser.Advanced.Loop (type_ :: reverseTypes))
+            |= Parser.Advanced.lazy (\() -> parseType)
+        ]
+
+
+parseType : Parser (Located Type)
+parseType =
+    Parser.Advanced.succeed identity
+        |= (Parser.Advanced.oneOf
+                [ -- | TMixed
+                  parseMixedType
+
+                -- | TVar String
+                , parseTypeVar
+                    |> Parser.Advanced.map TVar
+
+                -- | TConcrete String
+                , parseTypeConcrete
+                    |> Parser.Advanced.map TConcrete
+
+                -- | TQuote (List (Located Type))
+                , parseTypeQuote
+                    |> Parser.Advanced.map TQuote
+                ]
+                |> Located.parse
+           )
+        |. Parser.Advanced.spaces
+
+
+parseTypeQuote : Parser (List (Located Type))
+parseTypeQuote =
+    Parser.Advanced.succeed identity
+        |. token "["
+        |. Parser.Advanced.spaces
+        |= parseTypeStack "]"
+
+
+parseTypeVar : Parser String
+parseTypeVar =
+    Parser.Advanced.succeed ()
+        |. Parser.Advanced.chompIf (\char -> Char.isAlpha char && Char.isLower char) ExpectedTypeVarStart
+        |. Parser.Advanced.chompWhile (\char -> Char.isAlphaNum char || char == '_' || char == '-')
+        |> Parser.Advanced.getChompedString
+
+
+parseTypeConcrete : Parser String
+parseTypeConcrete =
+    Parser.Advanced.succeed ()
+        |. Parser.Advanced.chompIf (\char -> Char.isAlpha char && Char.isUpper char) ExpectedTypeVarStart
+        |. Parser.Advanced.chompWhile (\char -> Char.isAlphaNum char || char == '_' || char == '-')
+        |> Parser.Advanced.getChompedString
+
+
+parseMixedType : Parser Type
+parseMixedType =
+    Parser.Advanced.succeed TMixed
+        |. token "..."
+
+
 parseQuote : Parser (List (Located Word))
 parseQuote =
     Parser.Advanced.succeed identity
@@ -384,19 +500,27 @@ parseQuoteHelper reverseWords =
         ]
 
 
-parseLocated : Parser a -> Parser (Located a)
-parseLocated parser =
-    Parser.Advanced.succeed
-        (\( sr, sc ) a ( er, ec ) ->
-            Located
-                { start = { row = sr, column = sc }
-                , end = { row = er, column = ec }
-                }
-                a
-        )
-        |= Parser.Advanced.getPosition
-        |= parser
-        |= Parser.Advanced.getPosition
+parseChar : Parser String
+parseChar =
+    Parser.Advanced.succeed identity
+        |. token "'"
+        |= Parser.Advanced.oneOf
+            [ Parser.Advanced.succeed identity
+                |. token "\\"
+                |= Parser.Advanced.oneOf
+                    [ Parser.Advanced.map (\_ -> "\n") (token "n")
+                    , Parser.Advanced.map (\_ -> "\t") (token "t")
+                    , Parser.Advanced.map (\_ -> "\u{000D}") (token "r")
+                    , Parser.Advanced.succeed String.fromChar
+                        |. token "u{"
+                        |= parseUnicode
+                        |. token "}"
+                    ]
+            , Parser.Advanced.succeed ()
+                |. Parser.Advanced.chompIf (\_ -> True) ExpectedChar
+                |> Parser.Advanced.getChompedString
+            ]
+        |. token "'"
 
 
 parseString : Parser String
@@ -481,33 +605,6 @@ addHex char total =
 token : String -> Parser ()
 token tok =
     Parser.Advanced.token (Parser.Advanced.Token tok (TokenExpected tok))
-
-
-type alias File =
-    { gives : List (Located Give)
-    , uses : List (Located Use)
-    , definitions : List (Located Definition)
-    }
-
-
-type Give
-    = GWord String
-
-
-type alias Use =
-    { uri : Located Uri
-    , alias_ : Maybe (Located String)
-    , keyword : Located ()
-    , definitions : List (Located Definition)
-    }
-
-
-type alias Definition =
-    { docComment : Maybe (Located (List (Located String)))
-    , name : Located String
-    , typeDef : Maybe (Located TypeDefinition)
-    , body : Located (List (Located Word))
-    }
 
 
 type alias TypeDefinition =

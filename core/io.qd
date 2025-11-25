@@ -1,4 +1,4 @@
-[print] gives
+give: [print]
 
 
 print: (String -> )

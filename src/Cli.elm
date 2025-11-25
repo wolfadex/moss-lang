@@ -2,6 +2,7 @@ module Cli exposing (run)
 
 import BackendTask
 import BackendTask.File
+import Canonical
 import Cli.Option as Option
 import Cli.OptionsParser as OptionsParser
 import Cli.Program as Program
@@ -19,6 +20,12 @@ run =
                 |> BackendTask.allowFatal
                 |> BackendTask.andThen
                     (Source.parse
+                        >> Result.mapError Debug.toString
+                        >> Result.mapError FatalError.fromString
+                        >> BackendTask.fromResult
+                    )
+                |> BackendTask.andThen
+                    (Canonical.fromSource
                         >> Result.map Debug.toString
                         >> Result.mapError Debug.toString
                         >> Result.mapError FatalError.fromString

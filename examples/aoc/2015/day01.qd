@@ -1,9 +1,11 @@
-[main] give
+give: [main]
 
-file://../core/io.qd use
-file://../core/string.qd use
+use: [
+        file://../core/io.qd
+        file://../core/string.qd
+    ]
 
-main:
+main: (->)
     file://day01.txt io.readFile
     0
     [

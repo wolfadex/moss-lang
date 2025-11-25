@@ -1,4 +1,4 @@
-[fromInt32] gives
+give: [fromInt32]
 
 
 fromInt32: (Int32 -> String)
