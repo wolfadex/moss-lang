@@ -12,10 +12,3 @@ main:
     ] eachWith
     string.fromInt32
     io.print
-
-
-
-if: ([] [] -> Bool)
-elif: (Bool [] [] -> Bool)
-    :when :cond []
-else: (Bool [] [] ->)

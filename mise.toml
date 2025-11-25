@@ -1,0 +1,16 @@
+[env]
+_.path = ['{{config_root}}/node_modules/.bin']
+
+
+[tools]
+elm = "0.19"
+node = "22"
+just = "1"
+
+"npm:@ryannhg/css-in-elm" = "1"
+"npm:elm-format" = "0.8"
+"npm:elm-review" = "2"
+"npm:elm-esm" = "1.1.4"
+"npm:run-pty" = "5.0.0"
+"npm:elm-codegen" = "0.6.1"
+"npm:elm-pages" = "3.0.25"
