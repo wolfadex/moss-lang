@@ -2,6 +2,7 @@ module Canonical exposing (..)
 
 import Dict exposing (Dict)
 import Located exposing (Located(..))
+import Set exposing (Set)
 import Source
 
 
@@ -69,6 +70,7 @@ type Error
     | UnexpectedTypeDef Located.Span
     | UnexpectedWord (Located Source.Word)
     | UnsupportedUri (Located Source.Uri)
+    | ReservedWord Located.Span String
 
 
 type Warning
@@ -302,12 +304,60 @@ defsFromSourceHelper warnings definitions toDef =
             Ok ( List.reverse definitions, warnings )
 
         ((Located nameSpan (Source.WNamed name)) as nameWord) :: ((Located typeSpan (Source.WTypeDef typeDef)) as typeDefWord) :: rest ->
-            case expectNoIndentation nameWord of
+            case checkKeywords nameSpan name of
                 Just err ->
                     Err err
 
                 Nothing ->
-                    case mustBeIndented typeDefWord of
+                    case expectNoIndentation nameWord of
+                        Just err ->
+                            Err err
+
+                        Nothing ->
+                            case mustBeIndented typeDefWord of
+                                Just err ->
+                                    Err err
+
+                                Nothing ->
+                                    case validateDefBody rest of
+                                        Just err ->
+                                            Err err
+
+                                        Nothing ->
+                                            case foldlHaltable foldSourceWord ( [], [] ) rest of
+                                                Crashed err ->
+                                                    Err err
+
+                                                Complete ( body, bodyWarnings ) ->
+                                                    Ok
+                                                        ( { docComment = docComment
+                                                          , name = name
+                                                          , typeDef = Just typeDef
+                                                          , body = body
+                                                          }
+                                                            :: definitions
+                                                        , bodyWarnings ++ warnings
+                                                        )
+
+                                                Halted wordsToProcess ( body, bodyWarnings ) ->
+                                                    defsFromSourceHelper
+                                                        (bodyWarnings ++ warnings)
+                                                        ({ docComment = docComment
+                                                         , name = name
+                                                         , typeDef = Just typeDef
+                                                         , body = body
+                                                         }
+                                                            :: definitions
+                                                        )
+                                                        wordsToProcess
+
+        ((Located nameSpan (Source.WNamed name)) as nameWord) :: rest ->
+            case checkKeywords nameSpan name of
+                Just err ->
+                    Err err
+
+                Nothing ->
+                    case expectNoIndentation nameWord of
                         Just err ->
                             Err err
 
@@ -325,7 +375,7 @@ defsFromSourceHelper warnings definitions toDef =
                                             Ok
                                                 ( { docComment = docComment
                                                   , name = name
-                                                  , typeDef = Just typeDef
+                                                  , typeDef = Nothing
                                                   , body = body
                                                   }
                                                     :: definitions
@@ -337,50 +387,12 @@ defsFromSourceHelper warnings definitions toDef =
                                                 (bodyWarnings ++ warnings)
                                                 ({ docComment = docComment
                                                  , name = name
-                                                 , typeDef = Just typeDef
+                                                 , typeDef = Nothing
                                                  , body = body
                                                  }
                                                     :: definitions
                                                 )
                                                 wordsToProcess
-
-        ((Located nameSpan (Source.WNamed name)) as nameWord) :: rest ->
-            case expectNoIndentation nameWord of
-                Just err ->
-                    Err err
-
-                Nothing ->
-                    case validateDefBody rest of
-                        Just err ->
-                            Err err
-
-                        Nothing ->
-                            case foldlHaltable foldSourceWord ( [], [] ) rest of
-                                Crashed err ->
-                                    Err err
-
-                                Complete ( body, bodyWarnings ) ->
-                                    Ok
-                                        ( { docComment = docComment
-                                          , name = name
-                                          , typeDef = Nothing
-                                          , body = body
-                                          }
-                                            :: definitions
-                                        , bodyWarnings ++ warnings
-                                        )
-
-                                Halted wordsToProcess ( body, bodyWarnings ) ->
-                                    defsFromSourceHelper
-                                        (bodyWarnings ++ warnings)
-                                        ({ docComment = docComment
-                                         , name = name
-                                         , typeDef = Nothing
-                                         , body = body
-                                         }
-                                            :: definitions
-                                        )
-                                        wordsToProcess
 
         invalidName :: _ ->
             Err (InvalidDefName invalidName)
@@ -458,7 +470,12 @@ mapSourceWord ((Located span word) as sourceWord) =
                             mappedKey =
                                 case key of
                                     Source.WString string ->
-                                        Ok string
+                                        case checkKeywords keySpan string of
+                                            Just err ->
+                                                Err err
+
+                                            Nothing ->
+                                                Ok string
 
                                     _ ->
                                         Err (InvalidKey keySpan)
@@ -509,7 +526,12 @@ mapSourceWord ((Located span word) as sourceWord) =
                     )
 
         Source.WVariable var ->
-            Ok ( [ WVariable var ], [] )
+            case checkKeywords span var of
+                Just err ->
+                    Err err
+
+                Nothing ->
+                    Ok ( [ WVariable var ], [] )
 
         Source.WNamespacedWord (Located _ namespace) (Located _ name) ->
             Ok ( [ WNamespacedWord namespace name ], [] )
@@ -574,6 +596,30 @@ mustBeIndented : Located a -> Maybe Error
 mustBeIndented (Located span _) =
     if span.start.column == 1 then
         Just (ShouldBeIndented span)
+
+    else
+        Nothing
+
+
+keywords : Set String
+keywords =
+    Set.fromList
+        [ "if"
+        , "elif"
+        , "else"
+        , "iff"
+        , "get"
+        , "set"
+        , "at"
+        , "each"
+        , "size"
+        ]
+
+
+checkKeywords : Located.Span -> String -> Maybe Error
+checkKeywords span word =
+    if Set.member word keywords then
+        Just (ReservedWord span word)
 
     else
         Nothing

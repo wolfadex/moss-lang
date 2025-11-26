@@ -1,0 +1,27 @@
+{
+  "name": "moss-lang",
+  "version": "1.0.0",
+  "description": "A langauge inspired by Forth, Kitten, and Elm.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wolfadex/moss-lang.git"
+  },
+  "author": "Wolfgang Schuster",
+  "bugs": {
+    "url": "https://github.com/wolfadex/moss-lang/issues"
+  },
+  "homepage": "https://github.com/wolfadex/moss-lang#readme",
+  "devDependencies": {
+    "vite": "^7.2.4",
+    "vite-plugin-elm-watch": "^1.4.4"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/search": "^6.5.11",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@codemirror/view": "^6.38.8",
+    "codemirror": "^6.0.2"
+  }
+}

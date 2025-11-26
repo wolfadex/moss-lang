@@ -15,6 +15,7 @@
             "elm/json": "1.1.4",
             "elm/parser": "1.1.0",
             "pithub/elm-parser-bug-workaround": "1.0.0",
+            "pzp1997/assoc-list": "1.0.0",
             "wolfadex/elm-ansi": "3.0.0"
         },
         "indirect": {

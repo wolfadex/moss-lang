@@ -11,6 +11,6 @@ main: (->)
     [
         ['(' =] [1 +] if
         [')' =] [1 +] elif
-    ] eachWith
+    ] each
     string.fromInt32
     io.print

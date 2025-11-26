@@ -9,10 +9,4 @@ give: [sum]
 
 #| Takes a quote of numbers and adds them together
 sum: ([number] -> number)
-    0 [+]
-    # There are 2 built-in words, each and eachWith.
-    # Both take 2 quotes. The 2nd quote on the stack
-    # is iterated over, and for each value the 1st stack
-    # is "called". `eachWith` is also given a "starting"
-    # value between the 2 stacks.
-    eachWith
+    0 [+] each
