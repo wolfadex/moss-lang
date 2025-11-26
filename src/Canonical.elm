@@ -75,12 +75,13 @@ type Error
 
 type Warning
     = NoDefinitions
+    | NothingGiven Located.Span
 
 
 fromSource : List (Located Source.Word) -> Result Error ( File, List Warning )
 fromSource words =
     case filterComments words of
-        ((Located _ (Source.WNamed "give")) as giveWord) :: ((Located _ (Source.WQuote giving)) as givingWord) :: rest ->
+        ((Located _ (Source.WNamed "give")) as giveWord) :: ((Located givingSpan (Source.WQuote giving)) as givingWord) :: rest ->
             case expectNoIndentation giveWord of
                 Just err ->
                     Err err
@@ -108,7 +109,7 @@ fromSource words =
                                            )
                                     )
                                 )
-                                (givesFromSource giving)
+                                (givesFromSource givingSpan giving)
                                 (usesAndDefsFromSource rest)
 
         [] ->
@@ -137,16 +138,21 @@ filterComments =
         )
 
 
-givesFromSource : List (Located Source.Word) -> Result Error ( List Give, List Warning )
-givesFromSource wantToGive =
-    givesFromSourceHelper [] [] wantToGive
+givesFromSource : Located.Span -> List (Located Source.Word) -> Result Error ( List Give, List Warning )
+givesFromSource givingSpan wantToGive =
+    givesFromSourceHelper givingSpan [] [] wantToGive
 
 
-givesFromSourceHelper : List Warning -> List Give -> List (Located Source.Word) -> Result Error ( List Give, List Warning )
-givesFromSourceHelper warnings gives wantToGive =
+givesFromSourceHelper : Located.Span -> List Warning -> List Give -> List (Located Source.Word) -> Result Error ( List Give, List Warning )
+givesFromSourceHelper givingSpan warnings gives wantToGive =
     case wantToGive of
         [] ->
-            Ok ( List.reverse gives, warnings )
+            case gives of
+                [] ->
+                    Ok ( gives, NothingGiven givingSpan :: warnings )
+
+                _ ->
+                    Ok ( List.reverse gives, warnings )
 
         ((Located span (Source.WWord giving)) as giveWord) :: rest ->
             case mustBeIndented giveWord of
@@ -154,7 +160,7 @@ givesFromSourceHelper warnings gives wantToGive =
                     Err err
 
                 Nothing ->
-                    givesFromSourceHelper warnings (GWord giving :: gives) rest
+                    givesFromSourceHelper givingSpan warnings (GWord giving :: gives) rest
 
         cantGive :: rest ->
             Err (CantGive cantGive)

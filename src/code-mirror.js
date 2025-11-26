@@ -1,6 +1,13 @@
-import { EditorView, basicSetup } from "codemirror";
-import { EditorState, Compartment, Prec } from "@codemirror/state";
-import { keymap } from "@codemirror/view";
+import { EditorView, keymap, Decoration, hoverTooltip } from "@codemirror/view";
+import { basicSetup } from "codemirror";
+import {
+  EditorState,
+  Compartment,
+  Prec,
+  StateField,
+  StateEffect,
+} from "@codemirror/state";
+import { indentWithTab } from "@codemirror/commands";
 import { autocompletion, completeFromList } from "@codemirror/autocomplete";
 import { searchKeymap, search } from "@codemirror/search";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
@@ -12,6 +19,69 @@ import {
 import { styleTags, tags as t } from "@lezer/highlight";
 import { LRParser } from "@lezer/lr";
 import { oneDark } from "@codemirror/theme-one-dark";
+
+const setDiagnostics = StateEffect.define();
+
+const diagnosticsField = StateField.define({
+  create: () => ({ decorations: Decoration.none, diagnostics: [] }),
+  update(state, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setDiagnostics)) {
+        const builder = [];
+        for (const d of e.value) {
+          const from = d.from,
+            to = d.to ?? d.from;
+          const cls = d.severity === "error" ? "cm-error" : "cm-warning";
+          builder.push(
+            Decoration.mark({ class: cls }).range(from, Math.max(to, from + 1)),
+          );
+        }
+        return {
+          decorations: Decoration.set(builder, true),
+          diagnostics: e.value,
+        };
+      }
+    }
+    return {
+      decorations: state.decorations.map(tr.changes),
+      diagnostics: state.diagnostics,
+    };
+  },
+  provide: (f) => EditorView.decorations.from(f, (s) => s.decorations),
+});
+
+const diagnosticTooltip = hoverTooltip((view, pos) => {
+  const { diagnostics } = view.state.field(diagnosticsField);
+  for (const d of diagnostics) {
+    const from = d.from,
+      to = d.to ?? d.from + 1;
+    if (pos >= from && pos <= to && d.message) {
+      return {
+        pos: from,
+        end: to,
+        create: () => {
+          const el = document.createElement("div");
+          el.className = "cm-diagnostic-tooltip";
+          el.textContent = d.message;
+          return { dom: el };
+        },
+      };
+    }
+  }
+  return null;
+});
+
+const diagnosticsTheme = EditorView.baseTheme({
+  ".cm-error": { textDecoration: "underline wavy red" },
+  ".cm-warning": { textDecoration: "underline wavy orange" },
+  ".cm-diagnostic-tooltip": {
+    padding: "4px 8px",
+    background: "#333",
+    color: "#fff",
+    borderRadius: "4px",
+    fontSize: "13px",
+  },
+});
 
 class CodeMirrorEditor extends HTMLElement {
   static get observedAttributes() {
@@ -42,13 +112,16 @@ class CodeMirrorEditor extends HTMLElement {
         doc: value,
         extensions: [
           basicSetup,
+          diagnosticsField,
+          diagnosticTooltip,
+          diagnosticsTheme,
           this.langCompartment.of([]),
           this.themeCompartment.of(theme === "dark" ? oneDark : []),
           this.readonlyCompartment.of(EditorState.readOnly.of(readonly)),
           autocompletion(),
           closeBrackets(),
           search(),
-          keymap.of([...closeBracketsKeymap, ...searchKeymap]),
+          keymap.of([...closeBracketsKeymap, ...searchKeymap, indentWithTab]),
           Prec.highest(
             keymap.of([
               {
@@ -197,6 +270,54 @@ class CodeMirrorEditor extends HTMLElement {
   }
   set value(v) {
     this.setAttribute("value", v);
+  }
+
+  set diagnostics(diags) {
+    if (!this.view || !Array.isArray(diags)) return;
+    const mapped = diags
+      .map((d) => ({
+        from: this._toOffset(d.from),
+        to: d.to != null ? this._toOffset(d.to) : null,
+        severity: d.severity,
+      }))
+      .filter((d) => d.from !== null);
+    this.view.dispatch({ effects: setDiagnostics.of(mapped) });
+  }
+
+  set cursor(pos) {
+    if (!this.view) return;
+    const offset = this._toOffset(pos);
+    if (offset === null) return;
+    this.view.dispatch({
+      selection: { anchor: offset },
+      scrollIntoView: true,
+    });
+    this.view.focus();
+  }
+
+  set selection(sel) {
+    if (!this.view || !sel) return;
+    const from = this._toOffset(sel.from);
+    const to = this._toOffset(sel.to ?? sel.from);
+    if (from === null || to === null) return;
+    this.view.dispatch({
+      selection: { anchor: from, head: to },
+      scrollIntoView: true,
+    });
+    this.view.focus();
+  }
+
+  _toOffset(pos) {
+    if (typeof pos === "number") {
+      return Math.min(Math.max(0, pos), this.view.state.doc.length);
+    }
+    if (pos && typeof pos.line === "number") {
+      const line = Math.min(Math.max(1, pos.line), this.view.state.doc.lines);
+      const lineObj = this.view.state.doc.line(line);
+      const col = Math.min(Math.max(0, pos.col ?? 0), lineObj.length);
+      return lineObj.from + col;
+    }
+    return null;
   }
 }
 

@@ -1,14 +1,20 @@
 module CodeMirror exposing
     ( Completion
+    , Diagnostic
     , LanguageDef
+    , Position(..)
+    , Severity(..)
     , Theme(..)
     , TokenRule
     , completion
+    , cursor
+    , diagnostics
     , id
     , language
     , onChange
     , onSubmit
     , readonly
+    , selection
     , theme
     , tokenRule
     , value
@@ -44,6 +50,19 @@ type alias Completion =
     , type_ : String
     , info : Maybe String
     , detail : Maybe String
+    }
+
+
+type Severity
+    = Error
+    | Warning
+
+
+type alias Diagnostic =
+    { from : Position
+    , to : Maybe Position
+    , severity : Severity
+    , message : Maybe String
     }
 
 
@@ -107,6 +126,36 @@ onSubmit msg =
     on "submit" (D.succeed msg)
 
 
+diagnostics : List Diagnostic -> Html.Attribute msg
+diagnostics diags =
+    property "diagnostics" (E.list encodeDiagnostic diags)
+
+
+type Position
+    = Offset Int
+    | LineCol { line : Int, col : Int }
+
+
+cursor : Position -> Html.Attribute msg
+cursor pos =
+    property "cursor" (encodePosition pos)
+
+
+selection : { from : Position, to : Position } -> Html.Attribute msg
+selection sel =
+    property "selection" (E.object [ ( "from", encodePosition sel.from ), ( "to", encodePosition sel.to ) ])
+
+
+encodePosition : Position -> E.Value
+encodePosition pos =
+    case pos of
+        Offset n ->
+            E.int n
+
+        LineCol { line, col } ->
+            E.object [ ( "line", E.int line ), ( "col", E.int col ) ]
+
+
 encodeLanguageDef : LanguageDef -> E.Value
 encodeLanguageDef def =
     E.object
@@ -130,4 +179,22 @@ encodeCompletion c =
         , ( "type", E.string c.type_ )
         , ( "info", Maybe.withDefault E.null (Maybe.map E.string c.info) )
         , ( "detail", Maybe.withDefault E.null (Maybe.map E.string c.detail) )
+        ]
+
+
+encodeDiagnostic : Diagnostic -> E.Value
+encodeDiagnostic d =
+    E.object
+        [ ( "from", encodePosition d.from )
+        , ( "to", Maybe.withDefault E.null (Maybe.map encodePosition d.to) )
+        , ( "message", Maybe.withDefault E.null (Maybe.map E.string d.message) )
+        , ( "severity"
+          , E.string <|
+                case d.severity of
+                    Error ->
+                        "error"
+
+                    Warning ->
+                        "warning"
+          )
         ]
