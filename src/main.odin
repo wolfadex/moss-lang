@@ -1,6 +1,7 @@
 package main
 
 import "core:c"
+import "core:c/libc"
 import "core:fmt"
 import "core:log"
 import "core:math"
@@ -9,6 +10,8 @@ import os1 "core:os"
 import os "core:os/os2"
 import "core:slice"
 import "core:strings"
+import "core:sys/posix"
+import "core:unicode"
 import "core:unicode/utf8"
 
 main :: proc() {
@@ -43,26 +46,49 @@ main :: proc() {
 		defer reset_tracking_allocator(&tracking_allocator)
 	}
 
-	enable_raw_mode()
+	orig_termios: posix.termios
+
+	raw_termios := enable_raw_mode(&orig_termios)
+	defer disable_raw_mode(&orig_termios)
+	defer free(raw_termios)
 
 	input := make([]u8, 1)
 	defer delete(input)
 
 	for {
 		len_read, err := os.read(os.stdin, input)
+		c := utf8.string_to_runes(string(input), allocator = context.temp_allocator)[0]
 
-		log.debug(err)
-		log.debug(len_read)
 		if err != nil {
 			break
 		}
 
-		if input[0] == 'q' {
+		if c == 'q' {
 			break
+		}
+
+		if unicode.is_control(c) {
+			fmt.printf("%d\r\n", c)
+		} else {
+			fmt.printf("%d ('%c')\r\n", c, c)
 		}
 	}
 }
 
-enable_raw_mode :: proc() {
-	termios: rawptr
+enable_raw_mode :: proc(orig_termios: ^posix.termios) -> (raw: ^posix.termios) {
+	posix.tcgetattr(posix.STDIN_FILENO, orig_termios)
+
+	raw = new_clone(orig_termios^)
+	raw.c_iflag -= {.IXON, .BRKINT, .ICRNL, .INPCK, .ISTRIP}
+	raw.c_oflag -= {.OPOST}
+	raw.c_cflag += {.CS8}
+	raw.c_lflag -= {.ECHO, .ICANON, .ISIG, .IEXTEN}
+
+	posix.tcsetattr(posix.STDIN_FILENO, .TCSAFLUSH, raw)
+
+	return
+}
+
+disable_raw_mode :: proc(orig_termios: ^posix.termios) {
+	posix.tcsetattr(posix.STDIN_FILENO, .TCSAFLUSH, orig_termios)
 }
