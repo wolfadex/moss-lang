@@ -1,4 +1,4 @@
-# Quad Lang
+# Moss Lang
 
 A langauge inspired by Forth, Kitten, and Elm.
 
