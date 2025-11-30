@@ -1,0 +1,26 @@
+scripts:
+  start:
+    cmd: src/server.ts
+    allow:
+      - net
+      - env
+      - write
+      - read
+  s2:
+    cmd: src2/server.ts
+    allow:
+      - net
+      - env
+      - write
+      - read
+    env:
+      PORT: 4000
+      HOST: localhost
+  test:
+    cmd: src2/file.ts
+    allow:
+      - read
+      - write
+  upone: scp scripts.yaml root@161.35.125.40:/root/docserver
+  cloc: cloc --by-file src2
+  bundle: deno bundle src2/server.ts >serverBundle.js
