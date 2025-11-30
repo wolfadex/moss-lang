@@ -1,0 +1,34 @@
+{
+  "name": "text-editor",
+  "version": "1.0.0",
+  "description": "Pure Elm text editor",
+  "main": "Main.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "elm make src/Editor.elm",
+    "debug": "elm make --debug src/Editor.elm",
+    "go": "open -a /Applications/Firefox.app/ https://jxxcarlson.github.io/app/text-editor/index.html",
+    "cloc": "cloc --by-file src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jxxcarlson/elm-editor2"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jxxcarlson/elm-editor2/issues"
+  },
+  "homepage": "\"https://github.com/jxxcarlson/elm-editor2/",
+  "devDependencies": {
+    "elm": "latest-0.19.1",
+    "elm-format": "~0.8.3",
+    "elm-test": "latest-0.19.1",
+    "elm-review": "^1.0.2",
+    "elm-analyse": "0.16.5"
+  }
+}

@@ -1,0 +1,116 @@
+env:
+  APP_ROOT: /Users/jxxcarlson/dev/elm/projects/elm-editor/demo/public
+  DATA_ROOT: /Users/jxxcarlson/Documents/mudocs
+
+scripts:
+
+  cloc:
+    cmd: cloc --by-file src
+    desc: lines of code for server, by file
+
+  make:
+    cmd: elm make --optimize src/Main.elm --output=public/Main.js
+    desc: Compile editor in optimize mode
+
+  debug:
+    cmd: elm make --debug src/Main.elm --output=public/Main.js
+    desc: Compile editor in debug mode
+
+  minify:
+    cmd:
+      - elm make --optimize src/Main.elm --output=public/Main.js
+      - echo "Uglifying ..."
+      - uglifyjs  public/Main.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters=true,keep_fargs=false,unsafe_comps=true,unsafe=true,passes=2' --output=public/Main.min.js && uglifyjs public/Main.min.js --mangle --output=public/Main.min.js
+      - echo "Done"
+  live:
+    cmd:
+      pll:
+        - elm-live --proxy-prefix=/api --proxy-host=http://localhost:4000 -p 8001 -d public/ src/Main.elm -- --output public/Main.js
+        - open -a /Applications/Google\ Chrome.app/  http://localhost:8001
+    desc: Run editor with Elm Live
+
+
+  bro:
+     cmd: browserify public/assets/outside_source.js -o public/assets/outside.js
+     desc: browserify outside.js
+
+  dev:
+    cmd:
+      - browserify public/assets/outside_source.js -o public/assets/outside.js
+      - npx tauri dev
+    desc: Run tauri dev
+
+  bundle:
+    cmd:
+      - echo "Compiling ..."
+      - elm make --optimize src/Main.elm --output=dist/Main.js
+      - echo "Browserifying ..."
+      - browserify public/assets/outside_source.js -o dist/assets/outside.js
+      - echo "Building ..."
+      - npx tauri build
+      - echo "Copying dmg file to remote server ..."
+      - scp src-tauri/target/release/bundle/dmg/app.dmg root@161.35.125.40:/root/file_server
+      - echo "Moving app to Applications folder as muEdit.app"
+      - mv src-tauri/target/release/bundle/osx/app.app src-tauri/target/release/bundle/osx/muEdit.app
+      - rm -rf  /Applications/muEdit.app
+      - mv src-tauri/target/release/bundle/osx/muEdit.app /Applications
+      - open -a /Applications/muEdit.app
+
+    desc: Bundle app, copy dmg to remote filesever, move app to /Applications/muEdit.app
+
+  mu:
+    cmd: open -a /Applications/muEdit.app/
+    desc: Open muEdit.app
+
+  mu-debug:
+    cmd: open -a /Users/jxxcarlson/dev/elm/projects/elm-editor/demo/src-tauri/target/debug/bundle/osx/app.app
+    desc: Open debug version of muEdit.app
+
+  publish:
+    cmd: sh script/publish.sh
+    desc: publish editor to github pages
+
+  server:
+    desc: Run the local server
+    cmd:
+       - ${APP_ROOT}/localServer/server.ts
+    allow:
+      - net
+      - env
+      - write=${DATA_ROOT}
+      - read=${DATA_ROOT}
+
+  editor:
+    cmd:
+      desc: Run the editor app
+      pll:
+        - file_server ${APP_ROOT}
+        - open -a /Applications/Google\ Chrome.app/  http://0.0.0.0:4507/index.html
+
+  server?:
+    cmd: ps aux | grep deno | grep server.ts | grep allow | grep -v grep
+    desc: See if the server is running
+
+  ls:
+    cmd: ls ${DATA_ROOT} | sort
+    desc: List the data directory for the server
+
+  upone:
+    cmd: scp $1 root@161.35.125.40:/root/docserver/
+    desc: upload one file to Digital Ocean
+
+  upmany:
+    cmd: scp -r $1 root@161.35.125.40:/root/docserver
+    desc: upload one directory to Digital Ocean
+
+  uploadserver:
+    cmd: scp -r ${APP_ROOT}/localServer root@161.35.125.40:/root/docserver
+    desc: Upload the server to Digital Ocean
+
+  uploaddocs:
+    cmd: scp -r ${DATA_ROOT} root@161.35.125.40:/root/docserver
+    desc : Upload the server data to Digital Ocean
+
+  ssh:
+    cmd: ssh root@161.35.125.40
+    desc: ssh to Digital Ocean
