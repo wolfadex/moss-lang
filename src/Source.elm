@@ -17,6 +17,7 @@ type Word
     | WSet String
     | WUri Uri
     | WNamed String
+    | WNamedEnd
     | WQuote (List (Located Word))
     | WVariable String
     | WNamespacedWord (Located String) (Located String)
@@ -92,6 +93,7 @@ parseWord =
                 -- | WInt Int
                 -- | WFloat Float
                 , parseNumber
+                , parseNameEnd
 
                 -- | WRecord (List ( Located Word, Located Word ))
                 , parseRecord
@@ -130,6 +132,12 @@ parseWord =
                 |> Located.parse
            )
         |. Parser.Advanced.spaces
+
+
+parseNameEnd : Parser Word
+parseNameEnd =
+    Parser.Advanced.succeed WNamedEnd
+        |. token ";"
 
 
 parseVariable : Parser String
@@ -176,6 +184,7 @@ reservedChars =
         , '}'
         , '('
         , ')'
+        , ';'
         ]
 
 

@@ -17,9 +17,10 @@ run : Script
 run =
     Pages.Script.withCliOptions options
         (\{ inputFile } ->
-            gatherFiles
-                (AssocList.singleton inputFile ())
-                AssocList.empty
+            -- gatherFiles
+            --     (AssocList.singleton inputFile ())
+            --     AssocList.empty
+            parseFile inputFile
                 |> BackendTask.andThen Pages.Script.log
         )
 
@@ -39,7 +40,8 @@ options =
             )
 
 
-gatherFies : AssocList.Dict String () -> AssocList.Dict String Canonical.File -> BackendTask FatalError String
+
+-- gatherFies : AssocList.Dict String () -> AssocList.Dict String Canonical.File -> BackendTask FatalError String
 
 
 parseFile : String -> BackendTask FatalError String

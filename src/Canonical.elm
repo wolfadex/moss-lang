@@ -1,6 +1,7 @@
 module Canonical exposing (..)
 
 import Dict exposing (Dict)
+import Haltable exposing (Haltable)
 import Located exposing (Located(..))
 import Set exposing (Set)
 import Source
@@ -330,11 +331,11 @@ defsFromSourceHelper warnings definitions toDef =
                                             Err err
 
                                         Nothing ->
-                                            case foldlHaltable foldSourceWord ( [], [] ) rest of
-                                                Crashed err ->
+                                            case Haltable.foldlResult foldSourceWord ( [], [] ) rest of
+                                                Haltable.Crashed err ->
                                                     Err err
 
-                                                Complete ( body, bodyWarnings ) ->
+                                                Haltable.Success ( body, bodyWarnings ) ->
                                                     Ok
                                                         ( { docComment = docComment
                                                           , name = name
@@ -345,7 +346,7 @@ defsFromSourceHelper warnings definitions toDef =
                                                         , bodyWarnings ++ warnings
                                                         )
 
-                                                Halted wordsToProcess ( body, bodyWarnings ) ->
+                                                Haltable.ResultHalted wordsToProcess ( body, bodyWarnings ) ->
                                                     defsFromSourceHelper
                                                         (bodyWarnings ++ warnings)
                                                         ({ docComment = docComment
@@ -373,11 +374,11 @@ defsFromSourceHelper warnings definitions toDef =
                                     Err err
 
                                 Nothing ->
-                                    case foldlHaltable foldSourceWord ( [], [] ) rest of
-                                        Crashed err ->
+                                    case Haltable.foldlResult foldSourceWord ( [], [] ) rest of
+                                        Haltable.Crashed err ->
                                             Err err
 
-                                        Complete ( body, bodyWarnings ) ->
+                                        Haltable.Success ( body, bodyWarnings ) ->
                                             Ok
                                                 ( { docComment = docComment
                                                   , name = name
@@ -388,7 +389,7 @@ defsFromSourceHelper warnings definitions toDef =
                                                 , bodyWarnings ++ warnings
                                                 )
 
-                                        Halted wordsToProcess ( body, bodyWarnings ) ->
+                                        Haltable.ResultHalted wordsToProcess ( body, bodyWarnings ) ->
                                             defsFromSourceHelper
                                                 (bodyWarnings ++ warnings)
                                                 ({ docComment = docComment
@@ -404,24 +405,26 @@ defsFromSourceHelper warnings definitions toDef =
             Err (InvalidDefName invalidName)
 
 
-foldSourceWord : Located Source.Word -> ( List Word, List Warning ) -> HaltableStep Error (Located Source.Word) ( List Word, List Warning )
+foldSourceWord : Located Source.Word -> ( List Word, List Warning ) -> Result Error (Haltable.Step ( List Word, List Warning ))
 foldSourceWord sourceWord ( mappedWords, warnings ) =
     case sourceWord of
         Located _ (Source.WNamed _) ->
-            HaltBefore
+            Ok Haltable.HaltBefore
 
         Located _ (Source.WDocComment _) ->
-            HaltBefore
+            Ok Haltable.HaltBefore
 
         _ ->
             case mapSourceWord sourceWord of
                 Err err ->
-                    Crash err
+                    Err err
 
                 Ok ( newWords, newWarnings ) ->
-                    Continue
-                        ( newWords ++ mappedWords
-                        , newWarnings ++ warnings
+                    Ok
+                        (Haltable.Continue
+                            ( newWords ++ mappedWords
+                            , newWarnings ++ warnings
+                            )
                         )
 
 
@@ -518,6 +521,9 @@ mapSourceWord ((Located span word) as sourceWord) =
 
         Source.WNamed _ ->
             Err (UnexpectedNamed span)
+
+        Source.WNamedEnd ->
+            Debug.todo ""
 
         Source.WQuote words ->
             words
@@ -649,37 +655,3 @@ listMapOrErrorHelper fn resList list =
 
                 Ok okA ->
                     listMapOrErrorHelper fn (okA :: resList) rest
-
-
-type Haltable e a b
-    = Halted (List a) b
-    | Crashed e
-    | Complete b
-
-
-type HaltableStep e a b
-    = Continue b
-    | HaltBefore
-    | HaltAfter b
-    | Crash e
-
-
-foldlHaltable : (a -> b -> HaltableStep e a b) -> b -> List a -> Haltable e a b
-foldlHaltable fn b list =
-    case list of
-        [] ->
-            Complete b
-
-        a :: rest ->
-            case fn a b of
-                HaltBefore ->
-                    Halted list b
-
-                HaltAfter intermediateB ->
-                    Halted rest intermediateB
-
-                Crash e ->
-                    Crashed e
-
-                Continue nextB ->
-                    foldlHaltable fn nextB rest

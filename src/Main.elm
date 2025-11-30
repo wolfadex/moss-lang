@@ -3,6 +3,7 @@ module Main exposing (..)
 import Browser
 import Canonical
 import CodeMirror
+import Eval
 import Html exposing (Html)
 import Located exposing (Located(..))
 import Source
@@ -20,12 +21,14 @@ main =
 
 type alias Model =
     { code : String
+    , evalModel : Eval.Model
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init () =
     ( { code = ""
+      , evalModel = Eval.init
       }
     , Cmd.none
     )
@@ -39,6 +42,7 @@ subscriptions _ =
 type Msg
     = CodeChanged String
     | UserWantsToRunCode
+    | EvalMessage Eval.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -50,8 +54,31 @@ update msg model =
             )
 
         UserWantsToRunCode ->
-            ( model
-            , Cmd.none
+            case Source.parse model.code of
+                Ok code ->
+                    let
+                        ( evalModel, effect ) =
+                            Eval.run code model.evalModel
+                    in
+                    ( { model
+                        | evalModel = evalModel
+                        , code = ""
+                      }
+                    , Cmd.map EvalMessage effect
+                    )
+
+                Err _ ->
+                    ( model
+                    , Cmd.none
+                    )
+
+        EvalMessage emsg ->
+            let
+                ( evalModel, effect ) =
+                    Eval.update emsg model.evalModel
+            in
+            ( { model | evalModel = evalModel }
+            , Cmd.map EvalMessage effect
             )
 
 
@@ -69,22 +96,12 @@ view model =
             , model.code
                 |> Source.parse
                 |> Result.mapError (List.map sourceErrorToDiagnostic)
-                |> Result.andThen
-                    (Canonical.fromSource
-                        >> Result.mapError (canonicalErrorToDiagnostic >> List.singleton)
-                    )
-                |> Result.map (\( _, warnings ) -> List.map canonicalWarningToDiagnostic warnings)
+                |> Result.map (\_ -> [])
                 |> resultMerge
                 |> CodeMirror.diagnostics
             ]
         , Html.code []
-            [ model.code
-                |> Source.parse
-                |> Result.mapError Debug.toString
-                |> Result.andThen
-                    (Canonical.fromSource
-                        >> Result.mapError Debug.toString
-                    )
+            [ model.evalModel
                 |> Debug.toString
                 |> Html.text
             ]
