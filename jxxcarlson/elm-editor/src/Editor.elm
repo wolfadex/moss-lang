@@ -4,7 +4,7 @@ module Editor exposing
     , insertAtCursor, lineAtCursor, getCursor, setCursor
     , placeInClipboard
     , getContent, getLineHeight, getSelectedString, getWrapOption, indexOf
-    , replaceSelection, replaceSelection2
+    , Config, replaceSelection, replaceSelection2
     )
 
 {-| Use the Editor module to embed a pure Elm text editor
@@ -61,6 +61,10 @@ import View.Search
 -}
 type Editor
     = Editor EditorModel
+
+
+type alias Config =
+    EditorModel.Config
 
 
 {-| -}
@@ -189,15 +193,16 @@ resize width height (Editor model) =
 view : Editor -> Html EMsg
 view (Editor model) =
     H.div [ HA.style "background-color" "#555", HA.style "height" (String.fromFloat (model.height + 0) ++ "px") ]
-        [ View.Editor.viewHeader model
-        , View.Search.searchPanel model
-        , View.Search.replacePanel model
-        , View.Editor.view model
-        , View.EditorFooter.view model
+        [ -- View.Editor.viewHeader model
+          -- , View.Search.searchPanel model
+          -- , View.Search.replacePanel model
+          -- ,
+          View.Editor.view model
 
+        -- , View.EditorFooter.view model
         -- , viewContextMenu model.width model
-        , View.Editor.viewDebug model
-        , View.Help.view model |> H.map MarkdownMsg
+        -- , View.Editor.viewDebug model
+        -- , View.Help.view model |> H.map MarkdownMsg
         ]
 
 
@@ -222,10 +227,11 @@ init config =
         cmd =
             Cmd.map ContextMenuMsg msg
     in
-    ( config, contextMenu )
+    ( ( config, contextMenu )
         |> EditorModel.init
         |> Editor
-        |> Cmd.Extra.withCmd cmd
+    , cmd
+    )
 
 
 {-| -Initialize the the editor with

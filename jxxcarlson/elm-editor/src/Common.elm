@@ -35,7 +35,7 @@ module Common exposing
 
 import Array exposing (Array)
 import Browser.Dom as Dom
-import Cmd.Extra exposing (withNoCmd)
+import Cmd.Extra
 import EditorModel exposing (EditorModel, Snapshot)
 import EditorMsg exposing (EMsg(..), Hover(..), Position)
 import History
@@ -372,12 +372,12 @@ newHover hover lines offset =
         HoverChar { line, column } ->
             let
                 sanitizedLine =
-                        -- Ensure that the line (number) is not
-                        -- beyond the index of the last line
-                        clamp 0 (lastLine lines) line
-                    
+                    -- Ensure that the line (number) is not
+                    -- beyond the index of the last line
+                    clamp 0 (lastLine lines) line
+
                 sanitizedColumn =
-                        clamp 0 (lastColumn lines (offset + sanitizedLine)) column
+                    clamp 0 (lastColumn lines (offset + sanitizedLine)) column
             in
             HoverChar
                 { line = sanitizedLine
@@ -393,7 +393,7 @@ sanitizeHover model =
 scrollCmd newWindow oldWindow lineHeight =
     let
         deltaOffset =
-            newWindow.offset - oldWindow.offset |> toFloat 
+            newWindow.offset - oldWindow.offset |> toFloat
 
         newViewportY yvp =
             yvp + 100 - deltaOffset * lineHeight
@@ -463,7 +463,7 @@ recordHistory : EditorModel -> ( EditorModel, Cmd EMsg )
 recordHistory model =
     model
         |> recordHistory_ model
-        |> withNoCmd
+        |> (\m -> ( m, Cmd.none ))
 
 
 recordHistory_ : EditorModel -> EditorModel -> EditorModel

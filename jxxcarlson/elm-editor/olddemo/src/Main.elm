@@ -285,7 +285,11 @@ update msg model =
                     {- DOC scroll LR (3) -}
                     Helper.Sync.syncAndHighlightRenderedText (Editor.lineAtCursor newEditor) (Cmd.map EditorMsg cmd) { model | editor = newEditor }
 
-                GotViewportForSync currentLine _ _ ->
+                GotViewportForSync currentLine _ e ->
+                    let
+                        _ =
+                            Debug.log "GotViewportForSync" e
+                    in
                     case currentLine of
                         Nothing ->
                             ( model, Cmd.none )

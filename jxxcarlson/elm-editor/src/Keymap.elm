@@ -20,7 +20,7 @@ transformMsg msg =
 type alias Keydown =
     { char : Maybe String
     , key : String
-    , modifier : Modifier
+    , modifiers : { control : Bool, alt : Bool, shift : Bool, meta : Bool }
     }
 
 
@@ -56,38 +56,26 @@ characterDecoder =
             )
 
 
-modifierDecoder : Decoder Modifier
+modifierDecoder : Decoder { control : Bool, alt : Bool, shift : Bool, meta : Bool }
 modifierDecoder =
-    JD.map3 modifierFromFlags
+    JD.map4 modifierFromFlags
         (JD.field "ctrlKey" JD.bool)
         (JD.field "shiftKey" JD.bool)
         (JD.field "altKey" JD.bool)
+        (JD.field "metaKey" JD.bool)
 
 
-modifierFromFlags : Bool -> Bool -> Bool -> Modifier
-modifierFromFlags ctrl shift option =
-    case ( ctrl, shift, option ) of
-        ( True, True, False ) ->
-            ControlAndShift
-
-        ( False, True, False ) ->
-            Shift
-
-        ( True, False, False ) ->
-            Control
-
-        ( False, False, True ) ->
-            Option
-
-        ( True, False, True ) ->
-            ControlAndOption
-
-        ( _, _, _ ) ->
-            None
+modifierFromFlags : Bool -> Bool -> Bool -> Bool -> { control : Bool, alt : Bool, shift : Bool, meta : Bool }
+modifierFromFlags ctrl shift alt meta =
+    { control = ctrl
+    , alt = alt
+    , shift = shift
+    , meta = meta
+    }
 
 
 keyToMsg : Keydown -> Decoder EMsg
-keyToMsg { char, key, modifier } =
+keyToMsg { char, key, modifiers } =
     let
         {- DOC decode  keypresses -}
         keyFrom keymap =
@@ -106,24 +94,27 @@ keyToMsg { char, key, modifier } =
 
         -- (Nothing,"Escape",None)
     in
-    case modifier of
-        None ->
+    case ( ( modifiers.control, modifiers.alt ), ( modifiers.shift, modifiers.meta ) ) of
+        ( ( False, False ), ( False, False ) ) ->
             keyOrCharFrom keymaps.noModifier
 
-        Control ->
+        ( ( True, False ), ( False, False ) ) ->
             keyFrom keymaps.control
 
-        Shift ->
+        ( ( False, False ), ( True, False ) ) ->
             keyOrCharFrom keymaps.shift
 
-        ControlAndShift ->
+        ( ( True, False ), ( True, False ) ) ->
             keyFrom keymaps.controlAndShift
 
-        ControlAndOption ->
+        ( ( True, True ), ( False, False ) ) ->
             keyFrom keymaps.controlAndOption
 
-        Option ->
+        ( ( False, True ), ( False, False ) ) ->
             keyFrom keymaps.option
+
+        _ ->
+            keyOrCharFrom keymaps.noModifier
 
 
 type alias Keymap =

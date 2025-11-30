@@ -4,7 +4,7 @@ import Action
 import Array
 import ArrayUtil
 import Browser.Dom as Dom
-import Cmd.Extra exposing (withCmd, withNoCmd)
+import Cmd.Extra
 import Common
     exposing
         ( hoversToPositions
@@ -41,8 +41,7 @@ update msg model =
             ( model, Cmd.none )
 
         ExitVimInsertMode ->
-            { model | editMode = VimEditor VimNormal }
-                |> withNoCmd
+            ( { model | editMode = VimEditor VimNormal }, Cmd.none )
 
         Test ->
             Action.goToLine 30 model
@@ -62,24 +61,28 @@ update msg model =
             ( { model | debounce = model.debounce }, Cmd.none )
 
         MoveUp ->
-            Action.cursorUp model
+            ( Action.cursorUp model
                 |> recordHistory_ model
-                |> withNoCmd
+            , Cmd.none
+            )
 
         MoveDown ->
-            Action.cursorDown model
+            ( Action.cursorDown model
                 |> recordHistory_ model
-                |> withNoCmd
+            , Cmd.none
+            )
 
         MoveLeft ->
-            Action.cursorLeft model
+            ( Action.cursorLeft model
                 |> recordHistory_ model
-                |> withNoCmd
+            , Cmd.none
+            )
 
         MoveRight ->
-            Action.cursorRight model
+            ( Action.cursorRight model
                 |> recordHistory_ model
-                |> withNoCmd
+            , Cmd.none
+            )
 
         NewLine ->
             (Function.newLine model |> Common.sanitizeHover)
@@ -90,21 +93,24 @@ update msg model =
                 ( debounce, debounceCmd ) =
                     Debounce.push EditorModel.debounceConfig char model.debounce
             in
-            Function.insertChar model.editMode char { model | debounce = debounce }
-                |> withCmd debounceCmd
+            ( Function.insertChar model.editMode char { model | debounce = debounce }
+            , debounceCmd
+            )
                 |> recordHistoryWithCmd model
 
         Indent ->
-            model
+            ( model
                 |> Action.indent
                 |> recordHistory_ model
-                |> withNoCmd
+            , Cmd.none
+            )
 
         Deindent ->
-            model
+            ( model
                 |> Action.deIndent
                 |> recordHistory_ model
-                |> withNoCmd
+            , Cmd.none
+            )
 
         KillLine ->
             Function.killLine model |> recordHistory
@@ -140,12 +146,20 @@ update msg model =
 
         -- Click works, continuous scroll does not
         -- Hover hover -> ( { model | hover = hover } |> Common.sanitizeHover , Cmd.none)
-        ViewportMotion _ ->
+        ViewportMotion res ->
+            let
+                _ =
+                    Debug.log "scrollToTopForElement" res
+            in
             ( model, Cmd.none )
 
         GotViewportInfo r ->
             case r of
                 Err e ->
+                    let
+                        _ =
+                            Debug.log "GotViewportInfo" e
+                    in
                     ( model, Cmd.none )
 
                 Ok vp ->
@@ -337,10 +351,10 @@ update msg model =
             ( model, Cmd.none )
 
         WrapSelection ->
-            Update.Wrap.selection model |> recordHistory_ model |> withNoCmd
+            ( Update.Wrap.selection model |> recordHistory_ model, Cmd.none )
 
         WrapAll ->
-            Update.Wrap.all model |> recordHistory_ model |> withNoCmd
+            ( Update.Wrap.all model |> recordHistory_ model, Cmd.none )
 
         ToggleAutoLineBreak ->
             case model.autoLineBreak of
@@ -412,7 +426,7 @@ update msg model =
                     ( model, Cmd.none )
 
         DoSearch key ->
-            Search.do key model |> withCmd Cmd.none
+            ( Search.do key model, Cmd.none )
 
         ToggleSearchPanel ->
             -- TODO: FOCUS ON "editor-search-box"
@@ -421,13 +435,13 @@ update msg model =
                 focusSearchBox =
                     Task.attempt (\_ -> EditorNoOp) (Dom.focus "editor-search-box")
             in
-            { model | showSearchPanel = not model.showSearchPanel } |> withCmd focusSearchBox
+            ( { model | showSearchPanel = not model.showSearchPanel }, focusSearchBox )
 
         ToggleReplacePanel ->
-            { model | canReplace = not model.canReplace } |> withNoCmd
+            ( { model | canReplace = not model.canReplace }, Cmd.none )
 
         OpenReplaceField ->
-            { model | canReplace = True } |> withNoCmd
+            ( { model | canReplace = True }, Cmd.none )
 
         RollSearchSelectionForward ->
             Update.Scroll.rollSearchSelectionForward model
@@ -436,7 +450,7 @@ update msg model =
             Update.Scroll.rollSearchSelectionBackward model
 
         AcceptReplacementText str ->
-            { model | replacementText = str } |> withNoCmd
+            ( { model | replacementText = str }, Cmd.none )
 
         ReplaceCurrentSelection ->
             case model.selection of
@@ -453,7 +467,7 @@ update msg model =
                     ( model, Cmd.none )
 
         AcceptLineNumber _ ->
-            model |> withNoCmd
+            ( model, Cmd.none )
 
         AcceptSearchText str ->
             Update.Scroll.toString str model
@@ -471,23 +485,27 @@ update msg model =
                     in
                     ( { model | topLine = lineNumber }, Cmd.none )
 
-                Err _ ->
+                Err e ->
+                    let
+                        _ =
+                            Debug.log "GotViewportForSync" e
+                    in
                     ( model, Cmd.none )
 
         ToggleDarkMode ->
-            Function.toggleViewMode model |> withNoCmd
+            ( Function.toggleViewMode model, Cmd.none )
 
         ToggleHelp ->
-            Function.toggleHelpState model |> withNoCmd
+            ( Function.toggleHelpState model, Cmd.none )
 
         ToggleEditMode ->
-            Function.toggleEditMode model |> withNoCmd
+            ( Function.toggleEditMode model, Cmd.none )
 
         ToggleShortCutExecution ->
             Vim.Update.toggleShortCutExecution model
 
         MarkdownMsg _ ->
-            model |> withNoCmd
+            ( model, Cmd.none )
 
         SelectGroup ->
             let
