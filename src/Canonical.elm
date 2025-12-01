@@ -294,6 +294,9 @@ uriToUse uri =
                             else
                                 Err (InvalidFileName span withoutExtension)
 
+        _ ->
+            Debug.todo ""
+
 
 defsFromSource : List (Located Source.Word) -> Result Error ( List Definition, List Warning )
 defsFromSource words =
@@ -518,6 +521,9 @@ mapSourceWord ((Located span word) as sourceWord) =
                         ( [ WUri (FilePath path) ]
                         , []
                         )
+
+                _ ->
+                    Debug.todo ""
 
         Source.WNamed _ ->
             Err (UnexpectedNamed span)

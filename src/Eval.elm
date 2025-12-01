@@ -1,7 +1,8 @@
 module Eval exposing (..)
 
 import Dict exposing (Dict)
-import Haltable exposing (Haltable)
+import Haltable
+import Http
 import Located exposing (Located(..))
 import Source
 import Task
@@ -38,6 +39,8 @@ type Word
 
 type Uri
     = FilePath String
+    | HttpPath String
+    | HttpsPath String
 
 
 type alias Context =
@@ -61,9 +64,123 @@ init =
     }
 
 
+builtins : Dict String (Context -> Result String (Haltable.Step ( Context, Effect Msg )))
+builtins =
+    Dict.fromList
+        [ -- MATH
+          ( "+"
+          , \ctx ->
+                case ctx.stack of
+                    (WInt right) :: (WInt left) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WInt (left + right) :: rest }, None )
+
+                    (WFloat right) :: (WFloat left) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WFloat (left + right) :: rest }, None )
+
+                    _ ->
+                        Err "expected 2 numbers"
+          )
+        , ( "-"
+          , \ctx ->
+                case ctx.stack of
+                    (WInt right) :: (WInt left) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WInt (left - right) :: rest }, None )
+
+                    (WFloat right) :: (WFloat left) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WFloat (left - right) :: rest }, None )
+
+                    _ ->
+                        Err "expected 2 numbers"
+          )
+        , ( "*"
+          , \ctx ->
+                case ctx.stack of
+                    (WInt right) :: (WInt left) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WInt (left * right) :: rest }, None )
+
+                    (WFloat right) :: (WFloat left) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WFloat (left * right) :: rest }, None )
+
+                    _ ->
+                        Err "expected 2 numbers"
+          )
+        , ( "/"
+          , \ctx ->
+                case ctx.stack of
+                    (WInt right) :: (WInt left) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WInt (left // right) :: rest }, None )
+
+                    (WFloat right) :: (WFloat left) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WFloat (left / right) :: rest }, None )
+
+                    _ ->
+                        Err "expected 2 numbers"
+          )
+
+        -- URIs
+        , ( "get"
+          , \ctx ->
+                case ctx.stack of
+                    (WUri (HttpsPath url)) :: rest ->
+                        Ok <|
+                            Haltable.HaltAfter
+                                ( { ctx | stack = rest }
+                                , HttpRequest
+                                    { method = "GET"
+                                    , headers = []
+                                    , url = "https://" ++ url
+                                    , body = Http.emptyBody
+                                    , expect = Http.expectString HttpResponse
+                                    , timeout = Nothing
+                                    , tracker = Nothing
+                                    }
+                                )
+
+                    _ ->
+                        Err "expected an URI"
+          )
+        , ( "get-h"
+          , \ctx ->
+                case ctx.stack of
+                    (WUri (HttpsPath url)) :: (WRecord rec) :: rest ->
+                        Ok <|
+                            Haltable.HaltAfter
+                                ( { ctx | stack = rest }
+                                , HttpRequest
+                                    { method = "GET"
+                                    , headers =
+                                        Dict.foldl
+                                            (\key val headers ->
+                                                case val of
+                                                    WString s ->
+                                                        Http.header key s :: headers
+
+                                                    WInt i ->
+                                                        Http.header key (String.fromInt i) :: headers
+
+                                                    _ ->
+                                                        headers
+                                            )
+                                            []
+                                            rec
+                                    , url = "https://" ++ url
+                                    , body = Http.emptyBody
+                                    , expect = Http.expectString HttpResponse
+                                    , timeout = Nothing
+                                    , tracker = Nothing
+                                    }
+                                )
+
+                    _ ->
+                        Err "expected an URI"
+          )
+        ]
+
+
 type Msg
     = Eval (List Word)
     | Continue
+    | HttpResponse (Result Http.Error String)
 
 
 run : List (Located Source.Word) -> Model -> ( Model, Cmd Msg )
@@ -88,7 +205,7 @@ update msg model =
                                         { model | context = ctx }
                                         effect
 
-                                Haltable.Crashed () ->
+                                Haltable.Crashed err ->
                                     ( model, Cmd.none )
 
                                 Haltable.ResultHalted remainingWords ( ctx, effect ) ->
@@ -103,13 +220,28 @@ update msg model =
                                 { model | context = ctx }
                                 effect
 
-                        Haltable.Crashed () ->
+                        Haltable.Crashed err ->
                             ( model, Cmd.none )
 
                         Haltable.ResultHalted remainingWords ( ctx, effect ) ->
                             runEffect
                                 { model | context = ctx, toEval = remainingWords ++ model.toEval }
                                 effect
+
+                HttpResponse (Err err) ->
+                    Debug.todo ""
+
+                HttpResponse (Ok data) ->
+                    ( { model
+                        | context =
+                            let
+                                context =
+                                    model.context
+                            in
+                            { context | stack = WString data :: context.stack }
+                      }
+                    , Cmd.none
+                    )
 
         Compiling name body ->
             case msg of
@@ -158,6 +290,12 @@ update msg model =
                             , Task.perform identity (Task.succeed Continue)
                             )
 
+                HttpResponse (Err err) ->
+                    Debug.todo ""
+
+                HttpResponse (Ok data) ->
+                    Debug.todo ""
+
 
 runEffect : Model -> Effect Msg -> ( Model, Cmd Msg )
 runEffect model effect =
@@ -171,14 +309,31 @@ runEffect model effect =
         SwitchToCompile name ->
             ( { model | mode = Compiling name [] }, Task.perform identity (Task.succeed Continue) )
 
+        HttpRequest request ->
+            ( model
+            , Http.request request
+            )
+
 
 type Effect msg
     = None
     | StepInto (List Word)
     | SwitchToCompile String
+    | HttpRequest Request
 
 
-evalWord : Word -> ( Context, Effect Msg ) -> Result () (Haltable.Step ( Context, Effect Msg ))
+type alias Request =
+    { method : String
+    , headers : List Http.Header
+    , url : String
+    , body : Http.Body
+    , expect : Http.Expect Msg
+    , timeout : Maybe Float
+    , tracker : Maybe String
+    }
+
+
+evalWord : Word -> ( Context, Effect Msg ) -> Result String (Haltable.Step ( Context, Effect Msg ))
 evalWord word ( context, _ ) =
     case word of
         WString _ ->
@@ -188,14 +343,17 @@ evalWord word ( context, _ ) =
             Ok <| Haltable.Continue ( { context | stack = word :: context.stack }, None )
 
         WWord name ->
-            Ok <|
-                case listDictFind ( "", name ) context.definitions of
-                    Nothing ->
-                        Debug.todo ""
+            case listDictFind ( "", name ) context.definitions of
+                Nothing ->
+                    case Dict.get name builtins of
+                        Nothing ->
+                            Debug.todo ""
 
-                    Just def ->
-                        Haltable.HaltAfter
-                            ( context, StepInto def )
+                        Just builtin ->
+                            builtin context
+
+                Just def ->
+                    Ok <| Haltable.HaltAfter ( context, StepInto def )
 
         WNamespacedWord namespace name ->
             case listDictFind ( namespace, name ) context.definitions of
@@ -268,7 +426,12 @@ evalWord word ( context, _ ) =
                         Haltable.Continue
                             ( { context
                                 | stack = rest
-                                , definitions = ( ( "", name ), [ w ] ) :: context.definitions
+                                , definitions =
+                                    if String.startsWith ":_" name then
+                                        context.definitions
+
+                                    else
+                                        ( ( "", String.dropLeft 1 name ), [ w ] ) :: context.definitions
                               }
                             , None
                             )
@@ -374,7 +537,7 @@ mapWord (Located _ sourceWord) =
                 |> List.filterMap
                     (\( Located _ key, value ) ->
                         case key of
-                            Source.WString k ->
+                            Source.WNamed k ->
                                 case mapWord value of
                                     Nothing ->
                                         Nothing
@@ -399,6 +562,12 @@ mapWord (Located _ sourceWord) =
             case uri of
                 Source.FilePath (Located _ path) ->
                     Just (WUri (FilePath path))
+
+                Source.HttpPath (Located _ path) ->
+                    Just (WUri (HttpPath path))
+
+                Source.HttpsPath (Located _ path) ->
+                    Just (WUri (HttpsPath path))
 
                 Source.UnknownUri _ _ ->
                     Nothing

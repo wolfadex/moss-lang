@@ -9,8 +9,12 @@ import EditorModel
 import EditorMsg
 import Eval
 import Html exposing (Html)
+import Html.Attributes
+import Html.Events
+import Json.Decode
 import Located exposing (Located(..))
 import Source
+import TextEditor
 
 
 main : Program () Model Msg
@@ -26,30 +30,36 @@ main =
 type alias Model =
     { code : String
     , evalModel : Eval.Model
-    , editor : Editor
+
+    -- , editor : Editor
+    -- , textEditor : TextEditor.Model
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init () =
-    let
-        ( editor, editorCmd ) =
-            Editor.init
-                { width = windowWidth 1200
-                , height = windowHeight 700
-                , fontSize = 16
-                , verticalScrollOffset = 3
-                , viewMode = EditorModel.Light
-                , debugOn = True
-                , viewLineNumbersOn = True
-                , wrapOption = EditorMsg.DontWrap
-                }
-    in
+    -- let
+    --     ( editor, editorCmd ) =
+    --         Editor.init
+    --             { width = windowWidth 1200
+    --             , height = windowHeight 700
+    --             , fontSize = 16
+    --             , verticalScrollOffset = 3
+    --             , viewMode = EditorModel.Light
+    --             , debugOn = True
+    --             , viewLineNumbersOn = True
+    --             , wrapOption = EditorMsg.DontWrap
+    --             }
+    -- in
     ( { code = ""
       , evalModel = Eval.init
-      , editor = editor
+
+      -- , editor = editor
+      -- , textEditor = TextEditor.initWith """Hello
+      -- World!"""
       }
-    , Cmd.map EditorMessage editorCmd
+    , Cmd.none
+      -- Cmd.map EditorMessage editorCmd
     )
 
 
@@ -61,8 +71,9 @@ subscriptions _ =
 type Msg
     = CodeChanged String
     | UserWantsToRunCode
+      -- | EditorMessage EditorMsg.EMsg
+      -- | TextEditorMessage TextEditor.Msg
     | EvalMessage Eval.Msg
-    | EditorMessage EditorMsg.EMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -101,11 +112,20 @@ update msg model =
             , Cmd.map EvalMessage effect
             )
 
-        EditorMessage emsg ->
-            Editor.update emsg model.editor
-                |> Tuple.mapBoth
-                    (\editor -> { model | editor = editor })
-                    (Cmd.map EditorMessage)
+
+
+-- EditorMessage emsg ->
+--     Editor.update emsg model.editor
+--         |> Tuple.mapBoth
+--             (\editor -> { model | editor = editor })
+--             (Cmd.map EditorMessage)
+-- TextEditorMessage tmsg ->
+--     TextEditor.update
+--         { toModel = \textEditor -> { model | textEditor = textEditor }
+--         , toMsg = TextEditorMessage
+--         }
+--         tmsg
+--         model.textEditor
 
 
 view : Model -> Browser.Document Msg
@@ -113,8 +133,21 @@ view model =
     { title = "Moss"
     , body =
         [ Html.text "Moss on a 🪨"
-        , Editor.view model.editor
-            |> Html.map EditorMessage
+        , Html.br [] []
+
+        -- , Editor.view model.editor
+        --     |> Html.map EditorMessage
+        -- , TextEditor.view
+        --     { toMsg = TextEditorMessage
+        --     }
+        --     model.textEditor
+        , Html.textarea
+            [ Html.Events.onInput CodeChanged
+            , Html.Attributes.value model.code
+            , Html.Events.on "keydown" decodeTextKeydown
+            ]
+            []
+        , Html.br [] []
         , Html.code []
             [ model.evalModel
                 |> Debug.toString
@@ -122,6 +155,51 @@ view model =
             ]
         ]
     }
+
+
+type alias Key =
+    { key : String
+    , alt : Bool
+    , shift : Bool
+    , ctrl : Bool
+    , meta : Bool
+    , isComposing : Bool
+    }
+
+
+decodeTextKeydown : Json.Decode.Decoder Msg
+decodeTextKeydown =
+    Json.Decode.map6 Key
+        (Json.Decode.field "key" Json.Decode.string)
+        (Json.Decode.field "altKey" Json.Decode.bool)
+        (Json.Decode.field "shiftKey" Json.Decode.bool)
+        (Json.Decode.field "ctrlKey" Json.Decode.bool)
+        (Json.Decode.field "metaKey" Json.Decode.bool)
+        (Json.Decode.field "isComposing" Json.Decode.bool)
+        |> Json.Decode.andThen
+            (\key ->
+                if key.isComposing then
+                    Json.Decode.fail "we're composing"
+
+                else
+                    case key.key of
+                        "Return" ->
+                            if key.meta then
+                                Json.Decode.succeed UserWantsToRunCode
+
+                            else
+                                Json.Decode.fail "ignore"
+
+                        "Enter" ->
+                            if key.meta then
+                                Json.Decode.succeed UserWantsToRunCode
+
+                            else
+                                Json.Decode.fail "ignore"
+
+                        _ ->
+                            Json.Decode.fail "ignore"
+            )
 
 
 windowWidth : Float -> Float

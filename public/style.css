@@ -1,108 +1,33 @@
-/*@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap");*/
+.editor {
+    display: grid;
+    background: rgb(240, 240, 240);
+    border: 1px solid black;
+    font-family: monospace;
 
-/* DARK MODE SUPPORT */
-:root {
-    --color_bg: #f2f0ef;
-    --color_fg: #333;
-}
-@media (prefers-color-scheme: dark) {
-    :root {
-        --color_bg: #333;
-        --color_fg: #f2f0ef;
+    .textarea {
+        opacity: 0;
+        height: 0;
+        width: 0;
+        pointer-events: none;
     }
-}
 
-body {
-    background-color: var(--color_bg);
-    color: var(--color_fg);
-}
+    &:focus-within {
+        outline: auto;
 
-header {
-    padding-left: 1rem;
-    padding-right: 1rem;
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-}
-
-a[aria-current="page"] {
-    font-style: italic;
-}
-
-article:has(form) {
-    border: 1px solid rgba(0, 0, 0, 0);
-}
-
-article:has(form[aria-invalid="true"]) {
-    border: 1px solid var(--pico-form-element-invalid-border-color);
-}
-
-form[aria-invalid="true"] small {
-    color: var(--pico-del-color);
-}
-
-.dropdown ul {
-    max-width: fit-content;
-}
-
-.pageCentered {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100lvh;
-    width: 100lvw;
-}
-
-.pageMarketing {
-    display: flex;
-    flex-direction: column;
-    height: 100lvh;
-    width: 100lvw;
-}
-
-.pageFull {
-    display: flex;
-    flex-direction: column;
-    height: 100lvh;
-    width: 100lvw;
-
-    header {
-        display: inherit;
-        box-shadow: 0px 2px 16px black;
-        padding-top: 0;
-        padding-bottom: 0;
-
-        nav {
-            width: 100lvw;
-
-            li {
-                padding-top: 0.5rem;
-                padding-bottom: 0.5rem;
-            }
+        .blinking-cursor {
+            width: 2px;
+            background-color: black;
+            animation: 1s blink step-end infinite;
         }
     }
+}
 
-    main {
-        overflow: auto;
-        display: grid;
+@keyframes blink {
+    from,
+    to {
+        background-color: rgba(0, 0, 0, 0);
     }
-
-    .statusCard {
-        justify-self: center;
-        margin-top: 4rem;
+    50% {
+        background-color: black;
     }
-}
-
-.statusCard {
-}
-
-.addForm {
-}
-
-section.addForm:has(> article > form) {
-    display: flex;
-    justify-content: center;
-    padding: 1rem;
 }

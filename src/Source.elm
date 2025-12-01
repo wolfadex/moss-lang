@@ -28,6 +28,8 @@ type Word
 
 type Uri
     = FilePath (Located String)
+    | HttpPath (Located String)
+    | HttpsPath (Located String)
     | UnknownUri (Located String) (Located String)
 
 
@@ -48,6 +50,7 @@ type Problem
     | ExpectedNamedEnd
     | ExpectedChar
     | ExpectedTypeVarStart
+    | ExpectedUriPart
 
 
 type alias DeadEnd =
@@ -258,6 +261,12 @@ parseUri ((Located _ scheme) as locScheme) =
         "file" ->
             parseFilePath
 
+        "http" ->
+            parseHttp
+
+        "https" ->
+            parseHttps
+
         _ ->
             parseUnknownUri locScheme
 
@@ -285,9 +294,70 @@ parseFilePathHelper reverseChunks =
             |. Parser.Advanced.spaces
         , Parser.Advanced.succeed (\chunk -> Parser.Advanced.Loop (chunk :: reverseChunks))
             |= (Parser.Advanced.succeed ()
-                    |. Parser.Advanced.chompWhile (\char -> not (isSpace char || char == '\\'))
+                    |. Parser.Advanced.chompIf (\char -> not (isSpace char || char == '\\')) ExpectedUriPart
                     |> Parser.Advanced.getChompedString
                )
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
+        ]
+
+
+parseHttp : Parser Uri
+parseHttp =
+    Parser.Advanced.succeed HttpPath
+        |= (Parser.Advanced.loop [] parseHttpHelper
+                |> Located.parse
+           )
+
+
+parseHttpHelper : List String -> Parser (Parser.Advanced.Step (List String) String)
+parseHttpHelper reverseChunks =
+    Parser.Advanced.oneOf
+        [ Parser.Advanced.succeed (Parser.Advanced.Loop ("\\ " :: reverseChunks))
+            |. token "\\ "
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
+            |. token " "
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
+            |. token "\t"
+            |. Parser.Advanced.spaces
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
+            |. token "\n"
+            |. Parser.Advanced.spaces
+        , Parser.Advanced.succeed (\chunk -> Parser.Advanced.Loop (chunk :: reverseChunks))
+            |= (Parser.Advanced.succeed ()
+                    |. Parser.Advanced.chompIf (\char -> not (isSpace char || char == '\\')) ExpectedUriPart
+                    |> Parser.Advanced.getChompedString
+               )
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
+        ]
+
+
+parseHttps : Parser Uri
+parseHttps =
+    Parser.Advanced.succeed HttpsPath
+        |= (Parser.Advanced.loop [] parseHttpsHelper
+                |> Located.parse
+           )
+
+
+parseHttpsHelper : List String -> Parser (Parser.Advanced.Step (List String) String)
+parseHttpsHelper reverseChunks =
+    Parser.Advanced.oneOf
+        [ Parser.Advanced.succeed (Parser.Advanced.Loop ("\\ " :: reverseChunks))
+            |. token "\\ "
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
+            |. token " "
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
+            |. token "\t"
+            |. Parser.Advanced.spaces
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
+            |. token "\n"
+            |. Parser.Advanced.spaces
+        , Parser.Advanced.succeed (\chunk -> Parser.Advanced.Loop (chunk :: reverseChunks))
+            |= (Parser.Advanced.succeed ()
+                    |. Parser.Advanced.chompIf (\char -> not (isSpace char || char == '\\')) ExpectedUriPart
+                    |> Parser.Advanced.getChompedString
+               )
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
         ]
 
 
@@ -318,9 +388,10 @@ parseUriPathHelper reverseChunks =
             |. Parser.Advanced.spaces
         , Parser.Advanced.succeed (\chunk -> Parser.Advanced.Loop (chunk :: reverseChunks))
             |= (Parser.Advanced.succeed ()
-                    |. Parser.Advanced.chompWhile (\char -> char /= ' ' && char /= '\\')
+                    |. Parser.Advanced.chompIf (\char -> not (isSpace (Debug.log "file uri char" char) || char == '\\')) ExpectedUriPart
                     |> Parser.Advanced.getChompedString
                )
+        , Parser.Advanced.succeed (Parser.Advanced.Done (String.concat (List.reverse reverseChunks)))
         ]
 
 
