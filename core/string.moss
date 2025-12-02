@@ -1,8 +1,8 @@
-fromInt32: (Int32 -> String)
-    **target__string_fromInt32**
+fromInt32:
+    **target__string_fromInt32**;
 
-toChars: (String -> [Char])
-    **target__string_toChars**
+toChars:
+    **target__string_toChars**;
 
-fromChars: ([Char] -> String)
-    **target__string_fromChars**
+fromChars:
+    **target__string_fromChars**;

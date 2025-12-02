@@ -5,6 +5,7 @@ import Haltable
 import Located exposing (Located(..))
 import Set exposing (Set)
 import Source
+import Url exposing (Url)
 
 
 type alias File =
@@ -26,8 +27,7 @@ type alias Use =
 
 type Uri
     = FilePath String
-    | HttpPath String
-    | HttpsPath String
+    | HttpPath Url
 
 
 type alias Definition =
@@ -192,7 +192,7 @@ uriToUse uri =
                 fileName :: _ ->
                     let
                         withoutExtension =
-                            String.dropRight 3 fileName
+                            String.dropRight 5 fileName
                     in
                     case String.uncons withoutExtension of
                         Nothing ->
@@ -205,15 +205,15 @@ uriToUse uri =
                             else
                                 Err (InvalidFileName span withoutExtension)
 
-        Source.HttpPath (Located span path) ->
-            case String.split "/" path |> List.reverse of
+        Source.HttpPath (Located span url) ->
+            case String.split "/" url.path |> List.reverse of
                 [] ->
-                    Err (InvalidUseFilePath span path)
+                    Err (InvalidUseFilePath span url.path)
 
                 fileName :: _ ->
                     let
                         withoutExtension =
-                            String.dropRight 3 fileName
+                            String.dropRight 5 fileName
                     in
                     case String.uncons withoutExtension of
                         Nothing ->
@@ -221,28 +221,7 @@ uriToUse uri =
 
                         Just ( first, rest ) ->
                             if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
-                                Ok ( HttpPath path, withoutExtension, [] )
-
-                            else
-                                Err (InvalidFileName span withoutExtension)
-
-        Source.HttpsPath (Located span path) ->
-            case String.split "/" path |> List.reverse of
-                [] ->
-                    Err (InvalidUseFilePath span path)
-
-                fileName :: _ ->
-                    let
-                        withoutExtension =
-                            String.dropRight 3 fileName
-                    in
-                    case String.uncons withoutExtension of
-                        Nothing ->
-                            Err (InvalidFileName span withoutExtension)
-
-                        Just ( first, rest ) ->
-                            if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
-                                Ok ( HttpsPath path, withoutExtension, [] )
+                                Ok ( HttpPath url, withoutExtension, [] )
 
                             else
                                 Err (InvalidFileName span withoutExtension)
@@ -433,12 +412,6 @@ mapSourceWord ((Located span word) as sourceWord) =
                 Source.HttpPath (Located _ path) ->
                     Ok
                         ( [ WUri (HttpPath path) ]
-                        , []
-                        )
-
-                Source.HttpsPath (Located _ path) ->
-                    Ok
-                        ( [ WUri (HttpsPath path) ]
                         , []
                         )
 

@@ -7,6 +7,7 @@ import Http
 import Located exposing (Located(..))
 import Source
 import Task
+import Url exposing (Url)
 
 
 type alias Model =
@@ -41,8 +42,7 @@ type Word
 
 type Uri
     = FilePath String
-    | HttpPath String
-    | HttpsPath String
+    | HttpPath Url
 
 
 type alias Context =
@@ -122,22 +122,22 @@ builtins =
         -- URIs
         , ( "use"
           , \ctx ->
-                case ctx.stack of
-                    (WUri uri) :: (WString alias_) :: rest ->
-                        case validateAliasedUseUri uri alias_ of
+                case Debug.log "use" ctx.stack of
+                    (WString alias_) :: (WUri uri) :: rest ->
+                        case validateAliasedUseUri uri alias_ |> Debug.log "valid use" of
                             Err () ->
                                 Err "invalid uri"
 
                             Ok ( validUri, namespace ) ->
                                 case validUri of
-                                    HttpsPath url ->
+                                    HttpPath url ->
                                         Ok <|
                                             Haltable.HaltAfter
                                                 ( { ctx | stack = rest }
                                                 , HttpRequest
                                                     { method = "GET"
                                                     , headers = []
-                                                    , url = "https://" ++ url
+                                                    , url = Url.toString url
                                                     , body = Http.emptyBody
                                                     , expect = Http.expectString (UseResponse namespace)
                                                     , timeout = Nothing
@@ -155,14 +155,14 @@ builtins =
 
                             Ok ( validUri, namespace ) ->
                                 case validUri of
-                                    HttpsPath url ->
+                                    HttpPath url ->
                                         Ok <|
                                             Haltable.HaltAfter
                                                 ( { ctx | stack = rest }
                                                 , HttpRequest
                                                     { method = "GET"
                                                     , headers = []
-                                                    , url = "https://" ++ url
+                                                    , url = Url.toString url
                                                     , body = Http.emptyBody
                                                     , expect = Http.expectString (UseResponse namespace)
                                                     , timeout = Nothing
@@ -179,14 +179,14 @@ builtins =
         , ( "read"
           , \ctx ->
                 case ctx.stack of
-                    (WUri (HttpsPath url)) :: rest ->
+                    (WUri (HttpPath url)) :: rest ->
                         Ok <|
                             Haltable.HaltAfter
                                 ( { ctx | stack = rest }
                                 , HttpRequest
                                     { method = "GET"
                                     , headers = []
-                                    , url = "https://" ++ url
+                                    , url = Url.toString url
                                     , body = Http.emptyBody
                                     , expect = Http.expectString HttpResponse
                                     , timeout = Nothing
@@ -200,7 +200,7 @@ builtins =
         , ( "readWith"
           , \ctx ->
                 case ctx.stack of
-                    (WUri (HttpsPath url)) :: (WMap rec) :: rest ->
+                    (WUri (HttpPath url)) :: (WMap rec) :: rest ->
                         Ok <|
                             Haltable.HaltAfter
                                 ( { ctx | stack = rest }
@@ -221,7 +221,7 @@ builtins =
                                             )
                                             []
                                             rec
-                                    , url = "https://" ++ url
+                                    , url = Url.toString url
                                     , body = Http.emptyBody
                                     , expect = Http.expectString HttpResponse
                                     , timeout = Nothing
@@ -237,14 +237,14 @@ builtins =
 
 validateAliasedUseUri : Uri -> String -> Result () ( Uri, String )
 validateAliasedUseUri uri aliasName =
-    case String.uncons aliasName of
+    case String.uncons aliasName |> Debug.log "alias name uncons" of
         Nothing ->
             -- Err (InvalidAlias aliasSpan aliasName)
             Err ()
 
         Just ( firstChar, restChars ) ->
             if Source.validWordStart firstChar && List.all Source.validWordMiddle (String.toList restChars) then
-                case uriToUse uri of
+                case uriToUse uri |> Debug.log "uri to use" of
                     Err err ->
                         Err err
 
@@ -278,7 +278,7 @@ uriToUse uri =
                 fileName :: _ ->
                     let
                         withoutExtension =
-                            String.dropRight 3 fileName
+                            String.dropRight 5 fileName
                     in
                     case String.uncons withoutExtension of
                         Nothing ->
@@ -293,53 +293,30 @@ uriToUse uri =
                                 -- Err (InvalidFileName span withoutExtension)
                                 Err ()
 
-        HttpPath path ->
-            case String.split "/" path |> List.reverse of
-                [] ->
-                    -- Err (InvalidUseFilePath span path)
-                    Err ()
+        HttpPath url ->
+            Debug.log "valid url?" <|
+                case String.split "/" url.path |> List.reverse |> Debug.log "url path" of
+                    [] ->
+                        -- Err (InvalidUseFilePath span path)
+                        Err ()
 
-                fileName :: _ ->
-                    let
-                        withoutExtension =
-                            String.dropRight 3 fileName
-                    in
-                    case String.uncons withoutExtension of
-                        Nothing ->
-                            -- Err (InvalidFileName span withoutExtension)
-                            Err ()
-
-                        Just ( first, rest ) ->
-                            if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
-                                Ok ( FilePath path, withoutExtension )
-
-                            else
+                    fileName :: _ ->
+                        let
+                            withoutExtension =
+                                String.dropRight 5 fileName
+                        in
+                        case String.uncons withoutExtension |> Debug.log "without" of
+                            Nothing ->
                                 -- Err (InvalidFileName span withoutExtension)
                                 Err ()
 
-        HttpsPath path ->
-            case String.split "/" path |> List.reverse of
-                [] ->
-                    -- Err (InvalidUseFilePath span path)
-                    Err ()
+                            Just ( first, rest ) ->
+                                if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
+                                    Ok ( HttpPath url, withoutExtension )
 
-                fileName :: _ ->
-                    let
-                        withoutExtension =
-                            String.dropRight 3 fileName
-                    in
-                    case String.uncons withoutExtension of
-                        Nothing ->
-                            -- Err (InvalidFileName span withoutExtension)
-                            Err ()
-
-                        Just ( first, rest ) ->
-                            if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
-                                Ok ( FilePath path, withoutExtension )
-
-                            else
-                                -- Err (InvalidFileName span withoutExtension)
-                                Err ()
+                                else
+                                    -- Err (InvalidFileName span withoutExtension)
+                                    Err ()
 
 
 type Msg
@@ -415,6 +392,10 @@ update msg model =
                 UseResponse namespace (Ok data) ->
                     case Source.parse data of
                         Err err ->
+                            let
+                                _ =
+                                    Debug.log "use parse err" err
+                            in
                             Debug.todo ""
 
                         Ok words ->
@@ -446,14 +427,11 @@ update msg model =
                                                     Canonical.FilePath path ->
                                                         Debug.todo ""
 
-                                                    Canonical.HttpPath path ->
-                                                        Debug.todo ""
-
-                                                    Canonical.HttpsPath path ->
+                                                    Canonical.HttpPath url ->
                                                         Http.request
                                                             { method = "GET"
                                                             , headers = []
-                                                            , url = "https://" ++ path
+                                                            , url = Url.toString url
                                                             , body = Http.emptyBody
                                                             , expect = Http.expectString (UseResponse (Maybe.withDefault use.name use.alias_))
                                                             , timeout = Nothing
@@ -801,11 +779,8 @@ mapSourceWord (Located _ sourceWord) =
                 Source.FilePath (Located _ path) ->
                     Just (WUri (FilePath path))
 
-                Source.HttpPath (Located _ path) ->
-                    Just (WUri (HttpPath path))
-
-                Source.HttpsPath (Located _ path) ->
-                    Just (WUri (HttpsPath path))
+                Source.HttpPath (Located _ url) ->
+                    Just (WUri (HttpPath url))
 
                 Source.UnknownUri _ _ ->
                     Nothing
@@ -875,11 +850,8 @@ mapCanonicalWord canonicalWord =
                 Canonical.FilePath path ->
                     WUri (FilePath path)
 
-                Canonical.HttpPath path ->
-                    WUri (HttpPath path)
-
-                Canonical.HttpsPath path ->
-                    WUri (HttpsPath path)
+                Canonical.HttpPath url ->
+                    WUri (HttpPath url)
 
         Canonical.WQuote words ->
             WQuote (List.map mapCanonicalWord words)
