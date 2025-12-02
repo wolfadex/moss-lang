@@ -2,8 +2,9 @@ module Main exposing (..)
 
 import Browser
 import Canonical
-import Dict
+import Dict exposing (Dict)
 import Eval
+import Haltable
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -95,10 +96,16 @@ view model =
                 , Html.Attributes.style "grid-column" "1 / 4"
                 ]
                 [ Html.text "Moss on a 🪨" ]
-            , Html.code []
-                [ model.evalModel.context.definitions
-                    |> Debug.toString
-                    |> Html.text
+            , Html.div []
+                [ Html.h3 [] [ Html.text "Definitions" ]
+                , model.evalModel.context.definitions
+                    |> List.map viewDefinition
+                    |> Html.ul []
+                , Html.h3 [] [ Html.text "Built-ins" ]
+                , Eval.builtins
+                    |> Dict.toList
+                    |> List.filterMap viewBuiltinDefinition
+                    |> Html.ul []
                 ]
             , Html.textarea
                 [ Html.Events.onInput CodeChanged
@@ -106,14 +113,47 @@ view model =
                 , Html.Events.on "keydown" decodeTextKeydown
                 ]
                 []
-            , Html.code []
-                [ model.evalModel.context.stack
+            , Html.div []
+                [ Html.h3 [] [ Html.text "Stack" ]
+                , model.evalModel.context.stack
                     |> List.map viewStackItem
                     |> Html.ol []
                 ]
             ]
         ]
     }
+
+
+viewBuiltinDefinition : ( String, ( String, Eval.Context -> Result String (Haltable.Step ( Eval.Context, Eval.Effect Eval.Msg )) ) ) -> Maybe (Html Msg)
+viewBuiltinDefinition ( key, ( description, _ ) ) =
+    if String.startsWith "target__" key then
+        Nothing
+
+    else
+        Html.li []
+            [ Html.b [] [ Html.text key ]
+            , Html.text " "
+            , Html.text description
+            ]
+            |> Just
+
+
+viewDefinition : ( ( String, String ), List Eval.Word ) -> Html Msg
+viewDefinition ( ( namespace, name ), words ) =
+    let
+        n =
+            if namespace == "" then
+                name
+
+            else
+                namespace ++ "." ++ name
+    in
+    Html.li []
+        [ Html.b [] [ Html.text (n ++ " ") ]
+        , words
+            |> List.map prettyPrintWordAbbreviated
+            |> Html.span []
+        ]
 
 
 viewStackItem : Eval.Word -> Html Msg
@@ -127,7 +167,15 @@ prettyPrintWordAbbreviated : Eval.Word -> Html Msg
 prettyPrintWordAbbreviated word =
     case word of
         Eval.WString string ->
-            Html.text ("\"" ++ string ++ "\"")
+            if String.length string > 16 then
+                Html.details []
+                    [ Html.summary []
+                        [ Html.span [] [ Html.text ("\"" ++ String.left 12 string ++ " ...\"") ] ]
+                    , Html.text ("\"" ++ string ++ "\"")
+                    ]
+
+            else
+                Html.text ("\"" ++ string ++ "\"")
 
         Eval.WChar char ->
             Html.text ("'" ++ char ++ "'")
@@ -205,7 +253,7 @@ prettyPrintWordAbbreviated word =
             Html.text (namespace ++ "." ++ name)
 
         Eval.WBuiltin w ->
-            Html.text w
+            Html.text "<internal>"
 
 
 type alias Key =

@@ -66,12 +66,13 @@ init =
     }
 
 
-builtins : Dict String (Context -> Result String (Haltable.Step ( Context, Effect Msg )))
+builtins : Dict String ( String, Context -> Result String (Haltable.Step ( Context, Effect Msg )) )
 builtins =
     Dict.fromList
         [ -- MATH
           ( "+"
-          , \ctx ->
+          , ( "gives the sum of 2 numbers"
+            , \ctx ->
                 case ctx.stack of
                     (WInt right) :: (WInt left) :: rest ->
                         Ok <| Haltable.Continue ( { ctx | stack = WInt (left + right) :: rest }, None )
@@ -81,9 +82,11 @@ builtins =
 
                     _ ->
                         Err "expected 2 numbers"
+            )
           )
         , ( "-"
-          , \ctx ->
+          , ( "gives the difference of 2 numbers"
+            , \ctx ->
                 case ctx.stack of
                     (WInt right) :: (WInt left) :: rest ->
                         Ok <| Haltable.Continue ( { ctx | stack = WInt (left - right) :: rest }, None )
@@ -93,9 +96,11 @@ builtins =
 
                     _ ->
                         Err "expected 2 numbers"
+            )
           )
         , ( "*"
-          , \ctx ->
+          , ( "gives the product of 2 numbers"
+            , \ctx ->
                 case ctx.stack of
                     (WInt right) :: (WInt left) :: rest ->
                         Ok <| Haltable.Continue ( { ctx | stack = WInt (left * right) :: rest }, None )
@@ -105,9 +110,11 @@ builtins =
 
                     _ ->
                         Err "expected 2 numbers"
+            )
           )
         , ( "/"
-          , \ctx ->
+          , ( "gives the quotient of 2 numbers"
+            , \ctx ->
                 case ctx.stack of
                     (WInt right) :: (WInt left) :: rest ->
                         Ok <| Haltable.Continue ( { ctx | stack = WInt (left // right) :: rest }, None )
@@ -117,11 +124,13 @@ builtins =
 
                     _ ->
                         Err "expected 2 numbers"
+            )
           )
 
         -- URIs
         , ( "use"
-          , \ctx ->
+          , ( "retrieves the data at the given URI and loads it under the appropriate namespace"
+            , \ctx ->
                 case Debug.log "use" ctx.stack of
                     (WString alias_) :: (WUri uri) :: rest ->
                         case validateAliasedUseUri uri alias_ |> Debug.log "valid use" of
@@ -175,9 +184,11 @@ builtins =
 
                     _ ->
                         Err "expected an URI"
+            )
           )
         , ( "read"
-          , \ctx ->
+          , ( "reads data from the given URI"
+            , \ctx ->
                 case ctx.stack of
                     (WUri (HttpPath url)) :: rest ->
                         Ok <|
@@ -196,9 +207,11 @@ builtins =
 
                     _ ->
                         Err "expected an URI"
+            )
           )
         , ( "readWith"
-          , \ctx ->
+          , ( "reads data from the given URI with some options"
+            , \ctx ->
                 case ctx.stack of
                     (WUri (HttpPath url)) :: (WMap rec) :: rest ->
                         Ok <|
@@ -231,11 +244,13 @@ builtins =
 
                     _ ->
                         Err "expected an URI"
+            )
           )
 
         -- STRINGS
         , ( "target__string_toInt32"
-          , \ctx ->
+          , ( "convert a String to an Int"
+            , \ctx ->
                 case ctx.stack of
                     (WString str) :: rest ->
                         case String.toInt str of
@@ -247,27 +262,33 @@ builtins =
 
                     _ ->
                         Err "expected a String"
+            )
           )
         , ( "target__string_fromInt32"
-          , \ctx ->
+          , ( "convert an Int to a String"
+            , \ctx ->
                 case ctx.stack of
                     (WInt int) :: rest ->
                         Ok <| Haltable.Continue ( { ctx | stack = WString (String.fromInt int) :: rest }, None )
 
                     _ ->
                         Err "expected a String"
+            )
           )
         , ( "target__string_split"
-          , \ctx ->
+          , ( "split a String on a value"
+            , \ctx ->
                 case ctx.stack of
                     (WString str) :: (WString splitStr) :: rest ->
                         Ok <| Haltable.Continue ( { ctx | stack = WQuote (List.map WString (String.split splitStr str)) :: rest }, None )
 
                     _ ->
                         Err "expected a String"
+            )
           )
         , ( "target__string_join"
-          , \ctx ->
+          , ( "join some Strings with a value"
+            , \ctx ->
                 case ctx.stack of
                     (WQuote parts) :: (WString joinStr) :: rest ->
                         let
@@ -292,18 +313,22 @@ builtins =
 
                     _ ->
                         Err "expected a Quote of String and a String to join with"
+            )
           )
         , ( "target__string_toChars"
-          , \ctx ->
+          , ( "break a String in Chars"
+            , \ctx ->
                 case ctx.stack of
                     (WString str) :: rest ->
                         Ok <| Haltable.Continue ( { ctx | stack = WQuote (List.map (String.fromChar >> WChar) (String.toList str)) :: rest }, None )
 
                     _ ->
                         Err "expected a String"
+            )
           )
         , ( "target__string_fromChars"
-          , \ctx ->
+          , ( "join some Chars into a String"
+            , \ctx ->
                 case ctx.stack of
                     (WQuote chars) :: rest ->
                         let
@@ -328,8 +353,223 @@ builtins =
 
                     _ ->
                         Err "expected a Quote of Char"
+            )
+          )
+
+        -- BOOLEAN LOGIC
+        , ( "="
+          , ( "checks for value equality, 0 means inequal and everything else means they are equal (default 1)"
+            , \ctx ->
+                case ctx.stack of
+                    right :: left :: rest ->
+                        Ok <|
+                            Haltable.Continue
+                                ( { ctx
+                                    | stack =
+                                        WInt
+                                            (if left == right then
+                                                1
+
+                                             else
+                                                0
+                                            )
+                                            :: rest
+                                  }
+                                , None
+                                )
+
+                    _ ->
+                        Err "expected 2 like values"
+            )
+          )
+        , ( "if"
+          , ( "runs a condition, checks for 0. If not 0, runs the branch. Puts 0 or 1 back on the stack"
+            , \ctx ->
+                case ctx.stack of
+                    (WQuote branch) :: (WQuote condition) :: rest ->
+                        -- Ok <|
+                        --     Haltable.Continue
+                        --         ( { ctx
+                        --             | stack =
+                        --                 WInt
+                        --                     (if left == right then
+                        --                         1
+                        --                      else
+                        --                         0
+                        --                     )
+                        --                     :: rest
+                        --           }
+                        --         , None
+                        --         )
+                        Err "implementation missing"
+
+                    _ ->
+                        Err "expected 2 quotes"
+            )
+          )
+        , ( "elif"
+          , ( "runs a condition if the top of the stack is a 0, checks for 0 from this condition. If not 0, runs the branch. Puts 0 or 1 back on the stack"
+            , \ctx ->
+                case ctx.stack of
+                    (WQuote branch) :: (WQuote condition) :: rest ->
+                        -- Ok <|
+                        --     Haltable.Continue
+                        --         ( { ctx
+                        --             | stack =
+                        --                 WInt
+                        --                     (if left == right then
+                        --                         1
+                        --                      else
+                        --                         0
+                        --                     )
+                        --                     :: rest
+                        --           }
+                        --         , None
+                        --         )
+                        Err "implementation missing"
+
+                    _ ->
+                        Err "expected 2 quotes"
+            )
+          )
+        , ( "else"
+          , ( "checks for 0 on the top of the stack. If not 0, runs the branch"
+            , \ctx ->
+                case ctx.stack of
+                    (WQuote branch) :: (WQuote condition) :: rest ->
+                        -- Ok <|
+                        --     Haltable.Continue
+                        --         ( { ctx
+                        --             | stack =
+                        --                 WInt
+                        --                     (if left == right then
+                        --                         1
+                        --                      else
+                        --                         0
+                        --                     )
+                        --                     :: rest
+                        --           }
+                        --         , None
+                        --         )
+                        Err "implementation missing"
+
+                    _ ->
+                        Err "expected 2 quotes"
+            )
+          )
+        , ( "run"
+          , ( "takes a quote and executes it"
+            , \ctx ->
+                case ctx.stack of
+                    (WQuote toRun) :: rest ->
+                        Ok <|
+                            Haltable.Continue
+                                ( { ctx
+                                    | stack = rest
+                                  }
+                                , StepInto toRun
+                                )
+
+                    _ ->
+                        Err "expected 2 quotes"
+            )
+          )
+        , ( "forget"
+          , ( "removes the most recent quoted names"
+            , \ctx ->
+                case ctx.stack of
+                    (WQuote toForget) :: rest ->
+                        Ok <|
+                            Haltable.Continue
+                                ( { ctx
+                                    | stack = rest
+                                    , definitions =
+                                        List.foldl
+                                            forgetDefinition
+                                            ctx.definitions
+                                            toForget
+                                  }
+                                , None
+                                )
+
+                    _ ->
+                        Err "expected 2 quotes"
+            )
+          )
+        , ( "forgetNamespace"
+          , ( "removes the namespaces"
+            , \ctx ->
+                case ctx.stack of
+                    (WQuote toForget) :: rest ->
+                        Ok <|
+                            Haltable.Continue
+                                ( { ctx
+                                    | stack = rest
+                                    , definitions =
+                                        List.foldl
+                                            forgetNamespaces
+                                            ctx.definitions
+                                            toForget
+                                  }
+                                , None
+                                )
+
+                    _ ->
+                        Err "expected 2 quotes"
+            )
           )
         ]
+
+
+forgetDefinition : Word -> Definitions -> Definitions
+forgetDefinition word defs =
+    case word of
+        WWord name ->
+            forgetDefinitionHelper ( "", name ) defs []
+
+        WNamespacedWord namespace name ->
+            forgetDefinitionHelper ( namespace, name ) defs []
+
+        _ ->
+            defs
+
+
+forgetDefinitionHelper : ( String, String ) -> Definitions -> Definitions -> Definitions
+forgetDefinitionHelper name toCheck checked =
+    case toCheck of
+        [] ->
+            List.reverse checked
+
+        (( nextName, _ ) as next) :: rest ->
+            if name == nextName then
+                List.reverse checked ++ rest
+
+            else
+                forgetDefinitionHelper name rest (next :: checked)
+
+
+forgetNamespaces : Word -> Definitions -> Definitions
+forgetNamespaces word defs =
+    case word of
+        WWord name ->
+            forgetNamespacesHelper name defs []
+
+        _ ->
+            defs
+
+
+forgetNamespacesHelper : String -> Definitions -> Definitions -> Definitions
+forgetNamespacesHelper name toCheck checked =
+    case toCheck of
+        [] ->
+            List.reverse checked
+
+        (( ( nextNameSpace, _ ), _ ) as next) :: rest ->
+            if name == nextNameSpace then
+                forgetNamespacesHelper name rest checked
+
+            else
+                forgetNamespacesHelper name rest (next :: checked)
 
 
 validateAliasedUseUri : Uri -> String -> Result () ( Uri, String )
@@ -651,8 +891,8 @@ evalWord word ( context, _ ) =
                         Nothing ->
                             Debug.todo ""
 
-                        Just builtin ->
-                            builtin context
+                        Just ( _, builtinFn ) ->
+                            builtinFn context
 
                 Just def ->
                     Ok <| Haltable.HaltAfter ( context, StepInto def )
@@ -662,8 +902,8 @@ evalWord word ( context, _ ) =
                 Nothing ->
                     Debug.todo ""
 
-                Just builtin ->
-                    builtin context
+                Just ( _, builtinFn ) ->
+                    builtinFn context
 
         WNamespacedWord namespace name ->
             case listDictFind ( namespace, name ) context.definitions of
