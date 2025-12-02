@@ -232,6 +232,67 @@ builtins =
                     _ ->
                         Err "expected an URI"
           )
+
+        -- STRINGS
+        , ( "target__string_toInt32"
+          , \ctx ->
+                case ctx.stack of
+                    (WString str) :: rest ->
+                        case String.toInt str of
+                            Nothing ->
+                                Err "expected a Int as a String"
+
+                            Just int ->
+                                Ok <| Haltable.Continue ( { ctx | stack = WInt int :: rest }, None )
+
+                    _ ->
+                        Err "expected a String"
+          )
+        , ( "target__string_fromInt32"
+          , \ctx ->
+                case ctx.stack of
+                    (WInt int) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WString (String.fromInt int) :: rest }, None )
+
+                    _ ->
+                        Err "expected a String"
+          )
+        , ( "target__string_toChars"
+          , \ctx ->
+                case ctx.stack of
+                    (WString str) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WQuote (List.map (String.fromChar >> WChar) (String.toList str)) :: rest }, None )
+
+                    _ ->
+                        Err "expected a String"
+          )
+        , ( "target__string_fromChars"
+          , \ctx ->
+                case ctx.stack of
+                    (WQuote chars) :: rest ->
+                        let
+                            toChars : Word -> List String -> Result String (Haltable.Step (List String))
+                            toChars word chunks =
+                                case word of
+                                    WChar char ->
+                                        Ok <| Haltable.Continue (char :: chunks)
+
+                                    _ ->
+                                        Err "expected a quote of chars"
+                        in
+                        case Haltable.foldlResult toChars [] chars of
+                            Haltable.Success chunks ->
+                                Ok <| Haltable.Continue ( { ctx | stack = WString (String.concat (List.reverse chunks)) :: rest }, None )
+
+                            Haltable.Crashed err ->
+                                Err err
+
+                            Haltable.ResultHalted _ _ ->
+                                Err "invalid state"
+
+                    _ ->
+                        Err "expected a Quote of Char"
+          )
         ]
 
 

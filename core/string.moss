@@ -1,6 +1,9 @@
 fromInt32:
     **target__string_fromInt32**;
 
+toInt32:
+    **target__string_toInt32**;
+
 toChars:
     **target__string_toChars**;
 
