@@ -1,4 +1,8 @@
-.editor {
+body {
+    margin: 0;
+}
+
+/*.editor {
     display: grid;
     background: rgb(240, 240, 240);
     border: 1px solid black;
@@ -30,4 +34,12 @@
     50% {
         background-color: black;
     }
+}*/
+
+.editorChat {
+    height: 100lvh;
+    width: 100lvw;
+    display: grid;
+    grid-template-columns: 20rem calc(100lvw - 40rem) 20rem;
+    grid-template-rows: 4rem calc(100lvh - 4rem);
 }

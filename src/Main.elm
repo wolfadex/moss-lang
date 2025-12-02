@@ -2,6 +2,7 @@ module Main exposing (..)
 
 import Browser
 import Canonical
+import Dict
 import Eval
 import Html exposing (Html)
 import Html.Attributes
@@ -87,22 +88,124 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "Moss"
     , body =
-        [ Html.text "Moss on a 🪨"
-        , Html.br [] []
-        , Html.textarea
-            [ Html.Events.onInput CodeChanged
-            , Html.Attributes.value model.code
-            , Html.Events.on "keydown" decodeTextKeydown
-            ]
-            []
-        , Html.br [] []
-        , Html.code []
-            [ model.evalModel
-                |> Debug.toString
-                |> Html.text
+        [ Html.div
+            [ Html.Attributes.class "editorChat" ]
+            [ Html.h1
+                [ Html.Attributes.style "grid-row" "1"
+                , Html.Attributes.style "grid-column" "1 / 4"
+                ]
+                [ Html.text "Moss on a 🪨" ]
+            , Html.code []
+                [ model.evalModel.context.definitions
+                    |> Debug.toString
+                    |> Html.text
+                ]
+            , Html.textarea
+                [ Html.Events.onInput CodeChanged
+                , Html.Attributes.value model.code
+                , Html.Events.on "keydown" decodeTextKeydown
+                ]
+                []
+            , Html.code []
+                [ model.evalModel.context.stack
+                    |> List.map viewStackItem
+                    |> Html.ol []
+                ]
             ]
         ]
     }
+
+
+viewStackItem : Eval.Word -> Html Msg
+viewStackItem word =
+    Html.li
+        []
+        [ prettyPrintWordAbbreviated word ]
+
+
+prettyPrintWordAbbreviated : Eval.Word -> Html Msg
+prettyPrintWordAbbreviated word =
+    case word of
+        Eval.WString string ->
+            Html.text ("\"" ++ string ++ "\"")
+
+        Eval.WChar char ->
+            Html.text ("'" ++ char ++ "'")
+
+        Eval.WWord w ->
+            Html.text w
+
+        Eval.WInt int ->
+            Html.text (String.fromInt int)
+
+        Eval.WFloat float ->
+            Html.text (String.fromFloat float)
+
+        Eval.WMap dict ->
+            case Dict.toList dict of
+                [] ->
+                    Html.text "{}"
+
+                [ ( key, value ) ] ->
+                    Html.span [] [ Html.text ("{ " ++ key ++ ": "), prettyPrintWordAbbreviated value, Html.text " }" ]
+
+                ( key, value ) :: rest ->
+                    Html.details []
+                        [ Html.summary []
+                            [ Html.span [] [ Html.text ("{ " ++ key ++ ": "), prettyPrintWordAbbreviated value, Html.text ", ... }" ] ]
+                        , (( key, value ) :: rest)
+                            |> List.map
+                                (\( k, v ) ->
+                                    Html.li []
+                                        [ Html.span [] [ Html.text (k ++ ": "), prettyPrintWordAbbreviated v ] ]
+                                )
+                            |> Html.ul []
+                        ]
+
+        Eval.WGet _ ->
+            Html.text ""
+
+        Eval.WSet _ ->
+            Html.text ""
+
+        Eval.WUri uri ->
+            Html.text ""
+
+        Eval.WNamed _ ->
+            Html.text ""
+
+        Eval.WNamedEnd ->
+            Html.text ""
+
+        Eval.WQuote words ->
+            case words of
+                [] ->
+                    Html.text "[]"
+
+                [ w ] ->
+                    Html.span [] [ Html.text "[", prettyPrintWordAbbreviated w, Html.text "]" ]
+
+                w :: rest ->
+                    Html.details []
+                        [ Html.summary []
+                            [ Html.span [] [ Html.text "[", prettyPrintWordAbbreviated w, Html.text " ...]" ] ]
+                        , (w :: rest)
+                            |> List.map
+                                (\w_ ->
+                                    Html.li []
+                                        [ prettyPrintWordAbbreviated w_ ]
+                                )
+                            |> Html.ul []
+                        ]
+
+        Eval.WVariable var ->
+            Html.text var
+
+        Eval.WNamespacedWord namespace name ->
+            Html.text (namespace ++ "." ++ name)
+
+        Eval.WBuiltin w ->
+            Html.text w
 
 
 type alias Key =
