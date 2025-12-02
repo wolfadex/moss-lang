@@ -9,3 +9,9 @@ toChars:
 
 fromChars:
     **target__string_fromChars**;
+
+split:
+    **target__string_split**;
+
+join:
+    **target__string_join**;

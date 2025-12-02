@@ -257,6 +257,42 @@ builtins =
                     _ ->
                         Err "expected a String"
           )
+        , ( "target__string_split"
+          , \ctx ->
+                case ctx.stack of
+                    (WString str) :: (WString splitStr) :: rest ->
+                        Ok <| Haltable.Continue ( { ctx | stack = WQuote (List.map WString (String.split splitStr str)) :: rest }, None )
+
+                    _ ->
+                        Err "expected a String"
+          )
+        , ( "target__string_join"
+          , \ctx ->
+                case ctx.stack of
+                    (WQuote parts) :: (WString joinStr) :: rest ->
+                        let
+                            toStrings : Word -> List String -> Result String (Haltable.Step (List String))
+                            toStrings word chunks =
+                                case word of
+                                    WString str ->
+                                        Ok <| Haltable.Continue (str :: chunks)
+
+                                    _ ->
+                                        Err "expected a quote of String"
+                        in
+                        case Haltable.foldlResult toStrings [] parts of
+                            Haltable.Success chunks ->
+                                Ok <| Haltable.Continue ( { ctx | stack = WString (String.join joinStr (List.reverse chunks)) :: rest }, None )
+
+                            Haltable.Crashed err ->
+                                Err err
+
+                            Haltable.ResultHalted _ _ ->
+                                Err "invalid state"
+
+                    _ ->
+                        Err "expected a Quote of String and a String to join with"
+          )
         , ( "target__string_toChars"
           , \ctx ->
                 case ctx.stack of
