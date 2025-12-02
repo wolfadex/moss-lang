@@ -4,9 +4,9 @@ import "core:fmt"
 import "core:os"
 
 main :: proc() {
-	source, ok := os.read_entire_file("examples/hello.qd")
+	source, ok := os.read_entire_file("examples/hello.moss")
 	if !ok {
-		fmt.println("Failed to read examples/hello.qd")
+		fmt.println("Failed to read examples/hello.moss")
 		return
 	}
 
@@ -19,4 +19,4 @@ main :: proc() {
 
 	interpreter := make_interpreter()
 
-	run(&interpreter, nodes, "examples/hello.qd")}
+	run(&interpreter, nodes, "examples/hello.moss")}

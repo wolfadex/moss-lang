@@ -1,9 +1,9 @@
 give: [main]
 
 use: [
-        file://../core/io.qd
-        file://../core/quote.qd
-        file://../core/string.qd "str"
+        file://../core/io.moss
+        file://../core/quote.moss
+        file://../core/string.moss "str"
     ]
 
 # The above are examples of importing/requiring other code.

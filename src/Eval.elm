@@ -118,7 +118,7 @@ builtins =
           )
 
         -- URIs
-        , ( "get"
+        , ( "read"
           , \ctx ->
                 case ctx.stack of
                     (WUri (HttpsPath url)) :: rest ->
@@ -139,7 +139,7 @@ builtins =
                     _ ->
                         Err "expected an URI"
           )
-        , ( "get-h"
+        , ( "readWith"
           , \ctx ->
                 case ctx.stack of
                     (WUri (HttpsPath url)) :: (WRecord rec) :: rest ->

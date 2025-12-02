@@ -1,8 +1,8 @@
 give: [main]
 
 use: [
-        file://../core/io.qd
-        file://../core/string.qd
+        file://../core/io.moss
+        file://../core/string.moss
     ]
 
 main: (->)
