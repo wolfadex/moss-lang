@@ -1,5 +1,6 @@
 module Eval exposing (..)
 
+import Canonical
 import Dict exposing (Dict)
 import Haltable
 import Http
@@ -26,7 +27,7 @@ type Word
     | WWord String
     | WInt Int
     | WFloat Float
-    | WRecord (Dict String Word)
+    | WMap (Dict String Word)
     | WGet String
     | WSet String
     | WUri Uri
@@ -35,6 +36,7 @@ type Word
     | WQuote (List Word)
     | WVariable String
     | WNamespacedWord String String
+    | WBuiltin String
 
 
 type Uri
@@ -118,6 +120,62 @@ builtins =
           )
 
         -- URIs
+        , ( "use"
+          , \ctx ->
+                case ctx.stack of
+                    (WUri uri) :: (WString alias_) :: rest ->
+                        case validateAliasedUseUri uri alias_ of
+                            Err () ->
+                                Err "invalid uri"
+
+                            Ok ( validUri, namespace ) ->
+                                case validUri of
+                                    HttpsPath url ->
+                                        Ok <|
+                                            Haltable.HaltAfter
+                                                ( { ctx | stack = rest }
+                                                , HttpRequest
+                                                    { method = "GET"
+                                                    , headers = []
+                                                    , url = "https://" ++ url
+                                                    , body = Http.emptyBody
+                                                    , expect = Http.expectString (UseResponse namespace)
+                                                    , timeout = Nothing
+                                                    , tracker = Nothing
+                                                    }
+                                                )
+
+                                    _ ->
+                                        Debug.todo ""
+
+                    (WUri uri) :: rest ->
+                        case validateUseUri uri of
+                            Err () ->
+                                Err "invalid uri"
+
+                            Ok ( validUri, namespace ) ->
+                                case validUri of
+                                    HttpsPath url ->
+                                        Ok <|
+                                            Haltable.HaltAfter
+                                                ( { ctx | stack = rest }
+                                                , HttpRequest
+                                                    { method = "GET"
+                                                    , headers = []
+                                                    , url = "https://" ++ url
+                                                    , body = Http.emptyBody
+                                                    , expect = Http.expectString (UseResponse namespace)
+                                                    , timeout = Nothing
+                                                    , tracker = Nothing
+                                                    }
+                                                )
+
+                                    _ ->
+                                        Debug.todo ""
+
+                    _ ->
+                        Err "expected an URI"
+          )
         , ( "read"
           , \ctx ->
                 case ctx.stack of
@@ -142,7 +200,7 @@ builtins =
         , ( "readWith"
           , \ctx ->
                 case ctx.stack of
-                    (WUri (HttpsPath url)) :: (WRecord rec) :: rest ->
+                    (WUri (HttpsPath url)) :: (WMap rec) :: rest ->
                         Ok <|
                             Haltable.HaltAfter
                                 ( { ctx | stack = rest }
@@ -177,15 +235,123 @@ builtins =
         ]
 
 
+validateAliasedUseUri : Uri -> String -> Result () ( Uri, String )
+validateAliasedUseUri uri aliasName =
+    case String.uncons aliasName of
+        Nothing ->
+            -- Err (InvalidAlias aliasSpan aliasName)
+            Err ()
+
+        Just ( firstChar, restChars ) ->
+            if Source.validWordStart firstChar && List.all Source.validWordMiddle (String.toList restChars) then
+                case uriToUse uri of
+                    Err err ->
+                        Err err
+
+                    Ok ( validUri, _ ) ->
+                        Ok ( validUri, aliasName )
+
+            else
+                -- Err (InvalidAlias aliasSpan aliasName)
+                Err ()
+
+
+validateUseUri : Uri -> Result () ( Uri, String )
+validateUseUri uri =
+    case uriToUse uri of
+        Err err ->
+            Err err
+
+        Ok ( validUri, name ) ->
+            Ok ( validUri, name )
+
+
+uriToUse : Uri -> Result () ( Uri, String )
+uriToUse uri =
+    case uri of
+        FilePath path ->
+            case String.split "/" path |> List.reverse of
+                [] ->
+                    -- Err (InvalidUseFilePath span path)
+                    Err ()
+
+                fileName :: _ ->
+                    let
+                        withoutExtension =
+                            String.dropRight 3 fileName
+                    in
+                    case String.uncons withoutExtension of
+                        Nothing ->
+                            -- Err (InvalidFileName span withoutExtension)
+                            Err ()
+
+                        Just ( first, rest ) ->
+                            if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
+                                Ok ( FilePath path, withoutExtension )
+
+                            else
+                                -- Err (InvalidFileName span withoutExtension)
+                                Err ()
+
+        HttpPath path ->
+            case String.split "/" path |> List.reverse of
+                [] ->
+                    -- Err (InvalidUseFilePath span path)
+                    Err ()
+
+                fileName :: _ ->
+                    let
+                        withoutExtension =
+                            String.dropRight 3 fileName
+                    in
+                    case String.uncons withoutExtension of
+                        Nothing ->
+                            -- Err (InvalidFileName span withoutExtension)
+                            Err ()
+
+                        Just ( first, rest ) ->
+                            if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
+                                Ok ( FilePath path, withoutExtension )
+
+                            else
+                                -- Err (InvalidFileName span withoutExtension)
+                                Err ()
+
+        HttpsPath path ->
+            case String.split "/" path |> List.reverse of
+                [] ->
+                    -- Err (InvalidUseFilePath span path)
+                    Err ()
+
+                fileName :: _ ->
+                    let
+                        withoutExtension =
+                            String.dropRight 3 fileName
+                    in
+                    case String.uncons withoutExtension of
+                        Nothing ->
+                            -- Err (InvalidFileName span withoutExtension)
+                            Err ()
+
+                        Just ( first, rest ) ->
+                            if Source.validWordStart first && List.all Source.validWordMiddle (String.toList rest) then
+                                Ok ( FilePath path, withoutExtension )
+
+                            else
+                                -- Err (InvalidFileName span withoutExtension)
+                                Err ()
+
+
 type Msg
     = Eval (List Word)
     | Continue
     | HttpResponse (Result Http.Error String)
+    | UseResponse String (Result Http.Error String)
 
 
 run : List (Located Source.Word) -> Model -> ( Model, Cmd Msg )
 run words model =
-    update (Eval (List.filterMap mapWord words)) model
+    update (Eval (List.filterMap mapSourceWord words)) model
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -243,6 +409,61 @@ update msg model =
                     , Cmd.none
                     )
 
+                UseResponse _ (Err err) ->
+                    Debug.todo ""
+
+                UseResponse namespace (Ok data) ->
+                    case Source.parse data of
+                        Err err ->
+                            Debug.todo ""
+
+                        Ok words ->
+                            case Canonical.fromSource words of
+                                Err err ->
+                                    Debug.todo ""
+
+                                Ok ( file, warnings ) ->
+                                    ( { model
+                                        | context =
+                                            let
+                                                context =
+                                                    model.context
+                                            in
+                                            { context
+                                                | definitions =
+                                                    List.map
+                                                        (\definition ->
+                                                            ( ( namespace, definition.name ), List.map mapCanonicalWord definition.body )
+                                                        )
+                                                        file.definitions
+                                                        ++ context.definitions
+                                            }
+                                      }
+                                    , file.uses
+                                        |> List.filterMap
+                                            (\use ->
+                                                case use.uri of
+                                                    Canonical.FilePath path ->
+                                                        Debug.todo ""
+
+                                                    Canonical.HttpPath path ->
+                                                        Debug.todo ""
+
+                                                    Canonical.HttpsPath path ->
+                                                        Http.request
+                                                            { method = "GET"
+                                                            , headers = []
+                                                            , url = "https://" ++ path
+                                                            , body = Http.emptyBody
+                                                            , expect = Http.expectString (UseResponse (Maybe.withDefault use.name use.alias_))
+                                                            , timeout = Nothing
+                                                            , tracker = Nothing
+                                                            }
+                                                            |> Just
+                                            )
+                                        |> Cmd.batch
+                                    )
+
         Compiling name body ->
             case msg of
                 Continue ->
@@ -294,6 +515,12 @@ update msg model =
                     Debug.todo ""
 
                 HttpResponse (Ok data) ->
+                    Debug.todo ""
+
+                UseResponse _ (Err err) ->
+                    Debug.todo ""
+
+                UseResponse _ (Ok data) ->
                     Debug.todo ""
 
 
@@ -355,6 +582,14 @@ evalWord word ( context, _ ) =
                 Just def ->
                     Ok <| Haltable.HaltAfter ( context, StepInto def )
 
+        WBuiltin name ->
+            case Dict.get name builtins of
+                Nothing ->
+                    Debug.todo ""
+
+                Just builtin ->
+                    builtin context
+
         WNamespacedWord namespace name ->
             case listDictFind ( namespace, name ) context.definitions of
                 Nothing ->
@@ -371,12 +606,12 @@ evalWord word ( context, _ ) =
         WFloat _ ->
             Ok <| Haltable.Continue ( { context | stack = word :: context.stack }, None )
 
-        WRecord _ ->
+        WMap _ ->
             Ok <| Haltable.Continue ( { context | stack = word :: context.stack }, None )
 
         WGet key ->
             case context.stack of
-                (WRecord rec) :: rest ->
+                (WMap rec) :: rest ->
                     case Dict.get key rec of
                         Nothing ->
                             Debug.todo ""
@@ -389,12 +624,12 @@ evalWord word ( context, _ ) =
 
         WSet key ->
             case context.stack of
-                (WRecord rec) :: newValue :: rest ->
+                (WMap rec) :: newValue :: rest ->
                     Ok <|
                         Haltable.Continue
                             ( { context
                                 | stack =
-                                    WRecord
+                                    WMap
                                         (Dict.update key
                                             (Maybe.map (\_ -> newValue))
                                             rec
@@ -452,6 +687,9 @@ compileWord word body =
         WWord _ ->
             Haltable.Continue (word :: body)
 
+        WBuiltin _ ->
+            Haltable.Continue (word :: body)
+
         WNamespacedWord _ _ ->
             Haltable.Continue (word :: body)
 
@@ -461,7 +699,7 @@ compileWord word body =
         WFloat _ ->
             Haltable.Continue (word :: body)
 
-        WRecord _ ->
+        WMap _ ->
             Haltable.Continue (word :: body)
 
         WGet _ ->
@@ -514,8 +752,8 @@ listDictFindBy fn values =
                 listDictFindBy fn rest
 
 
-mapWord : Located Source.Word -> Maybe Word
-mapWord (Located _ sourceWord) =
+mapSourceWord : Located Source.Word -> Maybe Word
+mapSourceWord (Located _ sourceWord) =
     case sourceWord of
         Source.WString string ->
             Just (WString string)
@@ -532,13 +770,13 @@ mapWord (Located _ sourceWord) =
         Source.WFloat float ->
             Just (WFloat float)
 
-        Source.WRecord pairs ->
+        Source.WMap pairs ->
             pairs
                 |> List.filterMap
                     (\( Located _ key, value ) ->
                         case key of
                             Source.WNamed k ->
-                                case mapWord value of
+                                case mapSourceWord value of
                                     Nothing ->
                                         Nothing
 
@@ -549,7 +787,7 @@ mapWord (Located _ sourceWord) =
                                 Nothing
                     )
                 |> Dict.fromList
-                |> WRecord
+                |> WMap
                 |> Just
 
         Source.WGet key ->
@@ -579,10 +817,13 @@ mapWord (Located _ sourceWord) =
             Just WNamedEnd
 
         Source.WQuote words ->
-            Just (WQuote (List.filterMap mapWord words))
+            Just (WQuote (List.filterMap mapSourceWord words))
 
         Source.WVariable var ->
             Just (WVariable var)
+
+        Source.WBuiltin name ->
+            Just (WBuiltin name)
 
         Source.WNamespacedWord (Located _ namespace) (Located _ name) ->
             Just (WNamespacedWord namespace name)
@@ -595,3 +836,59 @@ mapWord (Located _ sourceWord) =
 
         Source.WTypeDef _ ->
             Nothing
+
+
+mapCanonicalWord : Canonical.Word -> Word
+mapCanonicalWord canonicalWord =
+    case canonicalWord of
+        Canonical.WString string ->
+            WString string
+
+        Canonical.WChar char ->
+            WChar char
+
+        Canonical.WWord word ->
+            WWord word
+
+        Canonical.WInt int ->
+            WInt int
+
+        Canonical.WFloat float ->
+            WFloat float
+
+        Canonical.WMap dict ->
+            dict
+                |> Dict.foldl
+                    (\key value acc ->
+                        case List.map mapCanonicalWord value of
+                            [ val ] ->
+                                Dict.insert key val acc
+
+                            _ ->
+                                acc
+                    )
+                    Dict.empty
+                |> WMap
+
+        Canonical.WUri uri ->
+            case uri of
+                Canonical.FilePath path ->
+                    WUri (FilePath path)
+
+                Canonical.HttpPath path ->
+                    WUri (HttpPath path)
+
+                Canonical.HttpsPath path ->
+                    WUri (HttpsPath path)
+
+        Canonical.WQuote words ->
+            WQuote (List.map mapCanonicalWord words)
+
+        Canonical.WVariable var ->
+            WVariable var
+
+        Canonical.WBuiltin name ->
+            WBuiltin name
+
+        Canonical.WNamespacedWord namespace name ->
+            WNamespacedWord namespace name

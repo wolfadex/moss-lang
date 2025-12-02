@@ -12,7 +12,7 @@ type Word
     | WWord String
     | WInt Int
     | WFloat Float
-    | WRecord (List ( Located Word, Located Word ))
+    | WMap (List ( Located Word, Located Word ))
     | WGet String
     | WSet String
     | WUri Uri
@@ -24,6 +24,7 @@ type Word
     | WComment String
     | WDocComment String
     | WTypeDef TypeDefinition
+    | WBuiltin String
 
 
 type Uri
@@ -98,9 +99,9 @@ parseWord =
                 , parseNumber
                 , parseNameEnd
 
-                -- | WRecord (List ( Located Word, Located Word ))
+                -- | WMap (List ( Located Word, Located Word ))
                 , parseRecord
-                    |> Parser.Advanced.map WRecord
+                    |> Parser.Advanced.map WMap
 
                 -- | WQuote (List (Located Word))
                 , parseQuote
@@ -113,6 +114,8 @@ parseWord =
                 -- | WComment String
                 -- | WDocComment String
                 , parseComment
+                , parseBuiltin
+                    |> Parser.Advanced.map WBuiltin
 
                 -- | WVariable String
                 , parseVariable
@@ -150,6 +153,19 @@ parseVariable =
         |. Parser.Advanced.chompIf validWordStart ExpectedNameStart
         |. Parser.Advanced.chompWhile validWordMiddle
         |> Parser.Advanced.getChompedString
+
+
+parseBuiltin : Parser String
+parseBuiltin =
+    Parser.Advanced.succeed (\name -> "target__" ++ name)
+        |. token "**target__"
+        |= (Parser.Advanced.succeed ()
+                |. Parser.Advanced.chompIf validWordStart ExpectedNameStart
+                |. Parser.Advanced.chompWhile (\char -> validWordMiddle char && char /= '*')
+                |> Parser.Advanced.getChompedString
+           )
+        |. token "**"
+        |> Parser.Advanced.backtrackable
 
 
 parseGet : Parser String
